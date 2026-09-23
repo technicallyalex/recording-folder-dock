@@ -56,3 +56,4 @@ The official template's macOS and Linux build support is retained, but only Wind
 - [OBS recording output implementation](https://github.com/obsproject/obs-studio/blob/31.1.1/frontend/utility/AdvancedOutput.cpp)
 
 GPL-2.0-or-later. See [LICENSE](LICENSE).
+Developed using ChatGPT
