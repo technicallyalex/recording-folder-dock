@@ -1,4 +1,4 @@
-name: Windows build and tests
+name: Windows and Linux builds
 
 on:
   push:
@@ -24,4 +24,58 @@ jobs:
         with:
           name: recording-folder-dock-windows-x64
           path: dist/recording-folder-dock-*-windows-x64.zip
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OBS and Qt development libraries
+        run: |
+          sudo add-apt-repository --yes ppa:obsproject/obs-studio
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++ pkg-config python3 libobs-dev obs-studio qt6-base-dev
+      - name: Build, test, and package
+        run: bash scripts/build-linux.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recording-folder-dock-linux-x86_64
+          path: dist/recording-folder-dock-*-linux-x86_64.tar.gz
+          if-no-files-found: error
+
+  flatpak:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Flatpak build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Build and test against OBS Flatpak runtime
+        run: bash scripts/build-flatpak.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recording-folder-dock-flatpak-x86_64
+          path: |
+            dist/recording-folder-dock-*-flatpak-x86_64.flatpak
+            dist/obs-flatpak-metadata.ini
+          if-no-files-found: error
+
+  combined:
+    needs: [build, linux, flatpak]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+      - name: Create single download for both platforms
+        run: python3 scripts/package-combined.py packages dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recording-folder-dock-windows-linux
+          path: dist/*
           if-no-files-found: error
