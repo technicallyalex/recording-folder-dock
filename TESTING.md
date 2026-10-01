@@ -37,3 +37,7 @@ These require running the installed plugin inside OBS and have not been performe
 macOS and Linux builds are not validated.
 
 9. Enable automatic mode while recording and replay are active. Choose a folder; verify both stop before the picker opens and only replay restarts after selecting a path. Confirm replay saves into the new folder. Cancel once and verify both remain stopped.
+
+## v1.1.1 native picker
+
+Production uses the platform-native folder picker. The headless test application explicitly opts out of native dialogs so it can exercise the selection callbacks without desktop interaction. Verify the native Windows folder picker appearance, selection, and cancellation in OBS; the headless suite does not validate Windows shell UI.

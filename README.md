@@ -8,7 +8,7 @@ Download the Windows ZIP from [GitHub Releases](https://github.com/technicallyal
 
 Requires 64-bit OBS Studio 31.1 or newer. The Windows release is built against OBS 31.1.1 and Qt 6.8.3; it uses the Qt libraries supplied by OBS.
 
-1. Close OBS and extract `recording-folder-dock-1.1.0-windows-x64.zip`.
+1. Close OBS and extract `recording-folder-dock-1.1.1-windows-x64.zip`.
 2. Copy the extracted `recording-folder-dock` folder into `C:\ProgramData\obs-studio\plugins\`. Accept Windows's administrator prompt if shown. The DLL should end up at `C:\ProgramData\obs-studio\plugins\recording-folder-dock\bin\64bit\recording-folder-dock.dll`.
 3. Start OBS and enable **Docks > Recording Folder**.
 4. Click **Choose folder...** and select a folder. The displayed path is the saved destination. Drag the dock into your preferred position.
@@ -16,6 +16,8 @@ Requires 64-bit OBS Studio 31.1 or newer. The Windows release is built against O
 Alternatively, run the included `install-windows.ps1` from an Administrator PowerShell after extracting the ZIP. For a portable OBS installation, copy the DLL into that installation's `obs-plugins\64bit` folder instead. Do not install it in both locations.
 
 To uninstall, close OBS and remove only the `recording-folder-dock` plugin folder (or the DLL if installed in portable OBS). Your chosen recording destination remains saved in OBS.
+
+The folder picker uses the standard Windows Explorer dialog on Windows (v1.1.1). It selects folders, rather than individual files.
 
 ## Automatic folder changes (v1.1.0)
 

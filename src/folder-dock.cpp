@@ -235,7 +235,7 @@ void FolderDock::openPicker()
 	dialog->setAttribute(Qt::WA_DeleteOnClose);
 	dialog->setFileMode(QFileDialog::Directory);
 	dialog->setOption(QFileDialog::ShowDirsOnly);
-	dialog->setOption(QFileDialog::DontUseNativeDialog);
+	// Use the platform's native folder picker (Windows Explorer on Windows).
 	connect(dialog, &QFileDialog::accepted, this, [this, dialog, revision, target, original] {
 		if (shuttingDown_ || revision != profileRevision_)
 			return;

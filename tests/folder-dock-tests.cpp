@@ -64,6 +64,8 @@ void obs_frontend_remove_event_callback(obs_frontend_event_cb cb, void *data)
 
 int main(int argc, char **argv)
 {
+	// Headless tests need Qt widgets; production uses the native platform picker.
+	QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
 	QApplication app(argc, argv);
 	QTemporaryDir temp;
 	check(temp.isValid(), "temporary directory");
