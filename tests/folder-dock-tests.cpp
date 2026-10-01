@@ -4,6 +4,9 @@
 #include <QApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileDialog>
+#include <QPushButton>
+#include <QTimer>
 #include <QLineEdit>
 #include <QTemporaryDir>
 #include <cstdio>
@@ -16,6 +19,9 @@ bool replay = false;
 obs_frontend_event_cb callback = nullptr;
 void *callbackData = nullptr;
 int checks = 0;
+int stopRecordingCalls = 0;
+int stopReplayCalls = 0;
+int startReplayCalls = 0;
 void check(bool condition, const char *message)
 {
 	++checks;
@@ -40,6 +46,9 @@ extern "C" {
 config_t *obs_frontend_get_profile_config(void) { return profile; }
 bool obs_frontend_recording_active(void) { return recording; }
 bool obs_frontend_replay_buffer_active(void) { return replay; }
+void obs_frontend_recording_stop(void) { ++stopRecordingCalls; }
+void obs_frontend_replay_buffer_stop(void) { ++stopReplayCalls; }
+void obs_frontend_replay_buffer_start(void) { ++startReplayCalls; }
 void obs_frontend_add_event_callback(obs_frontend_event_cb cb, void *data)
 {
 	callback = cb;
@@ -55,6 +64,8 @@ void obs_frontend_remove_event_callback(obs_frontend_event_cb cb, void *data)
 
 int main(int argc, char **argv)
 {
+	// Headless tests need Qt widgets; production uses the native platform picker.
+	QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
 	QApplication app(argc, argv);
 	QTemporaryDir temp;
 	check(temp.isValid(), "temporary directory");
@@ -106,6 +117,55 @@ int main(int argc, char **argv)
 		config_set_bool(profile, "AdvOut", "FFOutputToFile", true);
 		check(dock.applyFolder(folder, error), "FFmpeg file mode saved");
 		check(get("AdvOut", "FFFilePath") == expected, "FFmpeg file key");
+		config_set_string(profile, "Output", "Mode", "Simple");
+		auto *automatic = dock.findChild<QPushButton *>("automaticFolderChange");
+		auto *choose = dock.findChild<QPushButton *>("chooseFolder");
+		check(automatic && !automatic->isChecked(), "automatic mode defaults off");
+		recording = replay = true;
+		dock.refresh();
+		check(!choose->isEnabled(), "manual mode remains locked while active");
+		automatic->setChecked(true);
+		check(choose->isEnabled(), "automatic mode permits choosing while active");
+		choose->click();
+		check(stopRecordingCalls == 1 && stopReplayCalls == 1, "both outputs asked to stop");
+		check(!choose->isEnabled() && !automatic->isEnabled(), "operation cannot be duplicated or toggled halfway");
+		QApplication::processEvents();
+		check(!dock.findChild<QFileDialog *>(), "picker waits for stops");
+		recording = false;
+		event(OBS_FRONTEND_EVENT_RECORDING_STOPPED);
+		QApplication::processEvents();
+		check(!dock.findChild<QFileDialog *>(), "recording stop alone does not open picker");
+		replay = false;
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED);
+		QApplication::processEvents();
+		auto *picker = dock.findChild<QFileDialog *>();
+		check(picker != nullptr, "picker opens after both stop");
+		picker->findChild<QLineEdit *>("fileNameEdit")->setText(temp.path());
+		check(picker->selectedFiles().value(0) == temp.path(), "picker contains chosen directory");
+		QMetaObject::invokeMethod(picker, "done", Qt::DirectConnection, Q_ARG(int, QDialog::Accepted));
+		check(get("SimpleOutput", "FilePath") == QDir::toNativeSeparators(temp.path()), "picker saves selected path");
+		check(startReplayCalls == 1, "replay requested only after successful selection");
+		QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+		dock.refresh();
+		choose->click();
+		QApplication::processEvents();
+		picker = dock.findChild<QFileDialog *>();
+		check(picker != nullptr, "idle automatic mode opens picker without stop requests");
+		check(stopRecordingCalls == 1 && stopReplayCalls == 1, "idle outputs are not stopped");
+		picker->reject();
+		QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+		check(startReplayCalls == 1, "cancel does not start replay");
+		dock.refresh();
+		replay = true;
+		choose->click();
+		event(OBS_FRONTEND_EVENT_PROFILE_CHANGING);
+		event(OBS_FRONTEND_EVENT_PROFILE_CHANGED);
+		replay = false;
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED);
+		QApplication::processEvents();
+		check(!dock.findChild<QFileDialog *>(), "profile change cancels pending picker");
+		check(startReplayCalls == 1, "profile change does not restart replay");
+		automatic->setChecked(false);
 		event(OBS_FRONTEND_EVENT_PROFILE_CHANGING);
 		check(!dock.applyFolder(temp.path(), error), "profile transition blocks changes");
 		config_close(profile);

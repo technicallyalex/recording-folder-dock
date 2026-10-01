@@ -23,5 +23,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: recording-folder-dock-windows-x64
-          path: dist/recording-folder-dock-windows-x64.zip
+          path: dist/recording-folder-dock-*-windows-x64.zip
           if-no-files-found: error

@@ -18,10 +18,14 @@ Remove-Item Env:Path -ErrorAction SilentlyContinue
 $env:Path = $buildSearchPath
 Push-Location $projectRoot
 try {
+    $version = (Get-Content buildspec.json -Raw | ConvertFrom-Json).version
+    $buildDir = "build_x64_v$version"
+    $package = Join-Path $projectRoot "dist\recording-folder-dock-$version-windows-x64"
+    if (Test-Path -LiteralPath "$package.zip") { throw "Package already exists: $package.zip. Bump the version to create a new release." }
     $testing = if ($Test) { 'ON' } else { 'OFF' }
-    & $cmake --preset windows-x64 "-DBUILD_TESTING=$testing"
+    & $cmake --preset windows-x64 -B $buildDir "-DBUILD_TESTING=$testing"
     if ($LASTEXITCODE) { throw 'Configuration failed.' }
-    & $cmake --build --preset windows-x64
+    & $cmake --build $buildDir --config RelWithDebInfo
     if ($LASTEXITCODE) { throw 'Build failed.' }
     if ($Test) {
         $obsBin = Join-Path $projectRoot '.deps\obs-studio-31.1.1\build_x64\rundir\Release\bin\64bit'
@@ -31,18 +35,17 @@ try {
         $previousQtPlugins = $env:QT_PLUGIN_PATH
         $env:QT_PLUGIN_PATH = Join-Path $qtRoot 'plugins'
         try {
-            & (Join-Path (Split-Path $cmake) 'ctest.exe') --test-dir build_x64 -C RelWithDebInfo --output-on-failure
+            & (Join-Path (Split-Path $cmake) 'ctest.exe') --test-dir $buildDir -C RelWithDebInfo --output-on-failure
             if ($LASTEXITCODE) { throw 'Tests failed.' }
         } finally {
             $env:QT_PLUGIN_PATH = $previousQtPlugins
         }
     }
-    $package = Join-Path $projectRoot 'dist\recording-folder-dock-windows-x64'
-    & $cmake --install build_x64 --config RelWithDebInfo --prefix $package
+    & $cmake --install $buildDir --config RelWithDebInfo --prefix $package
     if ($LASTEXITCODE) { throw 'Packaging failed.' }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install-windows.ps1') -Destination $package
     Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md'), (Join-Path $projectRoot 'TESTING.md'), (Join-Path $projectRoot 'LICENSE') -Destination $package
-    Compress-Archive -Path "$package\*" -DestinationPath "$package.zip" -Force
+    Compress-Archive -Path "$package\*" -DestinationPath "$package.zip"
     Write-Host "Package ready: $package.zip"
 } finally {
     $env:Path = $buildSearchPath
