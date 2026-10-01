@@ -22,6 +22,7 @@ manifest = {
     "modules": [{
         "name": "recording-folder-dock",
         "buildsystem": "cmake-ninja",
+        "builddir": True,
         "config-opts": ["-DCMAKE_BUILD_TYPE=RelWithDebInfo", "-DCMAKE_INSTALL_LIBDIR=lib", "-DBUILD_TESTING=ON"],
         "run-tests": True,
         "sources": [{"type": "dir", "path": str(source.resolve())}]
