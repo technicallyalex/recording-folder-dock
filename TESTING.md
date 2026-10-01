@@ -34,10 +34,16 @@ These require running the installed plugin inside OBS and have not been performe
 7. Confirm **Open folder** opens the destination in the file manager.
 8. Close OBS with the dock or picker open and confirm a clean shutdown.
 
-macOS and Linux builds are not validated.
+macOS builds are not validated. Linux build coverage is described below.
 
 9. Enable automatic mode while recording and replay are active. Choose a folder; verify both stop before the picker opens and only replay restarts after selecting a path. Confirm replay saves into the new folder. Cancel once and verify both remain stopped.
 
 ## v1.1.1 native picker
 
 Production uses the platform-native folder picker. The headless test application explicitly opts out of native dialogs so it can exercise the selection callbacks without desktop interaction. Verify the native Windows folder picker appearance, selection, and cancellation in OBS; the headless suite does not validate Windows shell UI.
+
+## v1.2.0 Linux coverage
+
+The workflow runs the same native test harness on Windows, Ubuntu 24.04 with the OBS PPA, and inside the stable OBS Flatpak runtime using its matching SDK. The combined download is produced only after all platform jobs succeed. Native package BUILD-INFO.txt records its build environment; the Flatpak job also saves OBS runtime metadata.
+
+Interactive Linux checks remain necessary: dock appearance and layout, desktop folder picker and cancellation on X11/Wayland, folder opening, actual recording/replay output, and folder access inside the Flatpak sandbox. Native binary compatibility is verified for the build environment, not every distribution. Other distributions should build against their own OBS/Qt libraries or use OBS Flatpak with the dedicated extension.

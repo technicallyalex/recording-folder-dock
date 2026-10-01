@@ -8,7 +8,7 @@ Download the Windows ZIP from [GitHub Releases](https://github.com/technicallyal
 
 Requires 64-bit OBS Studio 31.1 or newer. The Windows release is built against OBS 31.1.1 and Qt 6.8.3; it uses the Qt libraries supplied by OBS.
 
-1. Close OBS and extract `recording-folder-dock-1.1.1-windows-x64.zip`.
+1. Close OBS and extract `recording-folder-dock-1.2.0-windows-x64.zip`.
 2. Copy the extracted `recording-folder-dock` folder into `C:\ProgramData\obs-studio\plugins\`. Accept Windows's administrator prompt if shown. The DLL should end up at `C:\ProgramData\obs-studio\plugins\recording-folder-dock\bin\64bit\recording-folder-dock.dll`.
 3. Start OBS and enable **Docks > Recording Folder**.
 4. Click **Choose folder...** and select a folder. The displayed path is the saved destination. Drag the dock into your preferred position.
@@ -55,7 +55,7 @@ cmake --build --preset windows-x64
 cmake --install build_x64 --config RelWithDebInfo --prefix dist/package
 ```
 
-The official template's macOS and Linux build support is retained, but only Windows is validated for this release. See [TESTING.md](TESTING.md) for test coverage and remaining interactive checks.
+Windows, native Ubuntu 24.04 x86-64, and the OBS Flatpak runtime have automated build jobs. macOS is not validated. See [TESTING.md](TESTING.md) for test coverage and remaining interactive checks.
 
 ## Development references
 
@@ -66,3 +66,34 @@ The official template's macOS and Linux build support is retained, but only Wind
 GPL-2.0-or-later. See [LICENSE](LICENSE).
 
 Developed using ChatGPT
+
+## Linux and unified downloads (v1.2.0)
+
+The same source and feature set builds on Windows and Linux with one version number. The combined `recording-folder-dock-1.2.0-windows-linux.zip` contains all three packages. Extract and install only the package matching your OBS installation. A Windows DLL cannot load on Linux; Linux uses a shared library instead.
+
+### Native Linux OBS
+
+The prebuilt native package targets **Ubuntu 24.04 x86-64 with the OBS Project PPA**. Close OBS, extract the Linux tar.gz, and run `bash install-linux.sh` in the extracted directory. It installs without sudo into `${XDG_CONFIG_HOME:-$HOME/.config}/obs-studio/plugins/recording-folder-dock`. Open **Docks > Recording Folder**. `BUILD-INFO.txt` records the OBS/Qt versions and shared libraries used.
+
+For other native distributions (including Fedora and Arch), build against that distribution's installed OBS and Qt 6 development packages. The source uses OBS 30+ frontend APIs; use current supported OBS. Prerequisites: CMake 3.28+, Ninja, a C++17 compiler, pkg-config, Python 3, OBS development headers/libraries including the frontend API, and Qt 6 Widgets development files. On Ubuntu with the OBS PPA configured:
+
+```sh
+sudo apt install cmake ninja-build g++ pkg-config python3 obs-studio qt6-base-dev
+bash scripts/build-linux.sh
+```
+
+The OBS PPA package includes its development files; do not mix it with Ubuntu's separate `libobs-dev` package. Other distributions may package those headers separately.
+
+This runs the same test suite, then produces a native package matching the current machine. We do not claim that the Ubuntu binary works on every distribution or CPU architecture. Linux desktops use the Qt platform's native folder picker when available, with Qt's fallback otherwise.
+
+### OBS Flatpak (any distribution supporting Flatpak, x86-64)
+
+Install OBS from Flathub first, then install the dedicated extension bundle:
+
+```sh
+flatpak install --user ./recording-folder-dock-1.2.0-flatpak-x86_64.flatpak
+```
+
+Restart OBS and enable the dock. Use the Flatpak extension with Flatpak OBS, not the native Linux tar.gz. It is built against the stable OBS Flatpak and its matching SDK; updates that change OBS's runtime/ABI may require rebuilding the extension. Folder access follows OBS's existing sandbox permissions. This is a downloadable extension, not a Flathub store listing.
+
+To build it yourself, install `flatpak`, `flatpak-builder`, Python 3, and Git, commit your source changes, then run `bash scripts/build-flatpak.sh`. The script downloads OBS's stable runtime/SDK and builds the committed source. To uninstall: `flatpak uninstall --user com.obsproject.Studio.Plugin.RecordingFolderDock`.
