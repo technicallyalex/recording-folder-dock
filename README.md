@@ -78,9 +78,11 @@ The prebuilt native package targets **Ubuntu 24.04 x86-64 with the OBS Project P
 For other native distributions (including Fedora and Arch), build against that distribution's installed OBS and Qt 6 development packages. The source uses OBS 30+ frontend APIs; use current supported OBS. Prerequisites: CMake 3.28+, Ninja, a C++17 compiler, pkg-config, Python 3, OBS development headers/libraries including the frontend API, and Qt 6 Widgets development files. On Ubuntu with the OBS PPA configured:
 
 ```sh
-sudo apt install cmake ninja-build g++ pkg-config python3 libobs-dev obs-studio qt6-base-dev
+sudo apt install cmake ninja-build g++ pkg-config python3 obs-studio qt6-base-dev
 bash scripts/build-linux.sh
 ```
+
+The OBS PPA package includes its development files; do not mix it with Ubuntu's separate `libobs-dev` package. Other distributions may package those headers separately.
 
 This runs the same test suite, then produces a native package matching the current machine. We do not claim that the Ubuntu binary works on every distribution or CPU architecture. Linux desktops use the Qt platform's native folder picker when available, with Qt's fallback otherwise.
 
