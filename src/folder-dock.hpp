@@ -9,6 +9,7 @@ class QFileDialog;
 class QLabel;
 class QLineEdit;
 class QPushButton;
+class QTimer;
 
 class FolderDock final : public QWidget {
 public:
@@ -20,11 +21,22 @@ public:
 private:
 	static void onEvent(obs_frontend_event event, void *data);
 	void chooseFolder();
-	QString unavailableReason() const;
+	void openPicker();
+	void continueFolderChange();
+	QString unavailableReason(bool ignoreOutputs = false) const;
 	QLineEdit *path_;
 	QLabel *status_;
 	QPushButton *choose_;
 	QPushButton *open_;
+	QPushButton *automatic_;
+	QTimer *stopTimeout_;
+	bool waitingForStop_ = false;
+	bool automaticChange_ = false;
+	bool recordingStopping_ = false;
+	bool replayStopping_ = false;
+	bool stopRecordingRequested_ = false;
+	bool stopReplayRequested_ = false;
+	QString notice_;
 	QPointer<QFileDialog> picker_;
 	bool recordingBusy_ = false;
 	bool replayBusy_ = false;

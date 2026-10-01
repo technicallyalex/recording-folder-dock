@@ -59,6 +59,21 @@ FolderDock::FolderDock(QWidget *parent) : QWidget(parent)
 	buttons->addWidget(choose_);
 	buttons->addWidget(open_);
 	layout->addLayout(buttons);
+	automatic_ = new QPushButton(tr("Auto-stop / restart replay"), this);
+	automatic_->setObjectName("automaticFolderChange");
+	automatic_->setCheckable(true);
+	automatic_->setToolTip(tr("Choose folder stops recording and replay. After a folder is saved, replay starts again. Unsaved replay footage is discarded. Cancel leaves outputs stopped."));
+	layout->addWidget(automatic_);
+	connect(automatic_, &QPushButton::toggled, this, [this] { notice_.clear(); refresh(); });
+	stopTimeout_ = new QTimer(this);
+	stopTimeout_->setSingleShot(true);
+	stopTimeout_->setInterval(30000);
+	connect(stopTimeout_, &QTimer::timeout, this, [this] {
+		waitingForStop_ = false;
+		automaticChange_ = false;
+		notice_ = tr("OBS has not finished stopping. No folder was changed; try again once outputs stop.");
+		refresh();
+	});
 	status_ = new QLabel(this);
 	status_->setWordWrap(true);
 	layout->addWidget(status_);
@@ -83,13 +98,13 @@ FolderDock::~FolderDock()
 	obs_frontend_remove_event_callback(onEvent, this);
 }
 
-QString FolderDock::unavailableReason() const
+QString FolderDock::unavailableReason(bool ignoreOutputs) const
 {
 	if (shuttingDown_ || profileChanging_)
 		return tr("Waiting for OBS...");
-	if (recordingBusy_ || obs_frontend_recording_active())
+	if (!ignoreOutputs && (recordingBusy_ || obs_frontend_recording_active()))
 		return tr("Stop recording before changing the folder.");
-	if (replayBusy_ || obs_frontend_replay_buffer_active())
+	if (!ignoreOutputs && (replayBusy_ || obs_frontend_replay_buffer_active()))
 		return tr("Stop the replay buffer before changing the folder.");
 	auto *config = obs_frontend_get_profile_config();
 	if (!config)
@@ -116,10 +131,14 @@ void FolderDock::refresh()
 		path_->setCursorPosition(0);
 		path_->setToolTip(folder);
 	}
-	const QString reason = unavailableReason();
-	choose_->setEnabled(reason.isEmpty() && !picker_);
+	const QString reason = unavailableReason(automatic_->isChecked());
+	choose_->setEnabled(reason.isEmpty() && !picker_ && !waitingForStop_);
+	automatic_->setEnabled(!picker_ && !waitingForStop_);
 	open_->setEnabled(!folder.isEmpty() && QFileInfo(folder).isDir());
-	status_->setText(reason.isEmpty() ? tr("Applies to the next recording in this OBS profile.") : reason);
+	status_->setText(waitingForStop_ ? tr("Waiting for recording and replay to finish stopping...") :
+		!notice_.isEmpty() ? notice_ : !reason.isEmpty() ? reason : automatic_->isChecked() ?
+		tr("Choose folder stops recording and replay; saving a folder starts replay. Unsaved replay footage is discarded.") :
+		tr("Applies to the next recording in this OBS profile."));
 }
 
 bool FolderDock::applyFolder(const QString &folder, QString &error)
@@ -160,6 +179,51 @@ bool FolderDock::applyFolder(const QString &folder, QString &error)
 
 void FolderDock::chooseFolder()
 {
+	if (!unavailableReason(automatic_->isChecked()).isEmpty() || picker_ || waitingForStop_)
+		return;
+	notice_.clear();
+	automaticChange_ = automatic_->isChecked();
+	if (!automaticChange_) {
+		openPicker();
+		return;
+	}
+	waitingForStop_ = true;
+	stopRecordingRequested_ = false;
+	stopReplayRequested_ = false;
+	stopTimeout_->start();
+	// Stop requests are asynchronous. Only open the picker after both STOPPED events.
+	continueFolderChange();
+	refresh();
+}
+
+void FolderDock::continueFolderChange()
+{
+	if (!waitingForStop_)
+		return;
+	// A second stop request during finalization can force-stop/truncate a recording.
+	if (!stopRecordingRequested_ && !recordingStopping_ && obs_frontend_recording_active()) {
+		stopRecordingRequested_ = true;
+		obs_frontend_recording_stop();
+	}
+	if (!stopReplayRequested_ && !replayStopping_ && obs_frontend_replay_buffer_active()) {
+		stopReplayRequested_ = true;
+		obs_frontend_replay_buffer_stop();
+	}
+	if (recordingBusy_ || replayBusy_ ||
+	    obs_frontend_recording_active() || obs_frontend_replay_buffer_active())
+		return;
+	waitingForStop_ = false;
+	stopTimeout_->stop();
+	if (!unavailableReason().isEmpty()) {
+		automaticChange_ = false;
+		refresh();
+		return;
+	}
+	openPicker();
+}
+
+void FolderDock::openPicker()
+{
 	if (!unavailableReason().isEmpty() || picker_)
 		return;
 	const auto revision = profileRevision_;
@@ -187,8 +251,19 @@ void FolderDock::chooseFolder()
 		}
 		const auto selected = dialog->selectedFiles();
 		QString error;
-		if (!selected.isEmpty() && !applyFolder(selected.first(), error))
-			QMessageBox::warning(this, tr("Recording Folder"), error);
+		if (!selected.isEmpty()) {
+			if (!applyFolder(selected.first(), error)) {
+				QMessageBox::warning(this, tr("Recording Folder"), error);
+			} else if (automaticChange_) {
+				// Never restart recording. OBS reports replay start errors through its normal UI.
+				obs_frontend_replay_buffer_start();
+				notice_ = tr("Folder saved. Replay start requested; recording remains stopped.");
+			}
+		}
+	});
+	connect(dialog, &QFileDialog::rejected, this, [this] {
+		if (automaticChange_)
+			notice_ = tr("Folder selection canceled. Recording and replay remain stopped.");
 	});
 	connect(dialog, &QObject::destroyed, this, [this] { refresh(); });
 	dialog->open();
@@ -201,21 +276,35 @@ void FolderDock::onEvent(obs_frontend_event event, void *data)
 	switch (event) {
 	case OBS_FRONTEND_EVENT_RECORDING_STARTING:
 	case OBS_FRONTEND_EVENT_RECORDING_STARTED:
+		dock->recordingStopping_ = false;
+		dock->recordingBusy_ = true;
+		break;
 	case OBS_FRONTEND_EVENT_RECORDING_STOPPING:
+		dock->recordingStopping_ = true;
 		dock->recordingBusy_ = true;
 		break;
 	case OBS_FRONTEND_EVENT_RECORDING_STOPPED:
+		dock->recordingStopping_ = false;
 		dock->recordingBusy_ = false;
 		break;
 	case OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTING:
 	case OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED:
+		dock->replayStopping_ = false;
+		dock->replayBusy_ = true;
+		break;
 	case OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPING:
+		dock->replayStopping_ = true;
 		dock->replayBusy_ = true;
 		break;
 	case OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED:
+		dock->replayStopping_ = false;
 		dock->replayBusy_ = false;
 		break;
 	case OBS_FRONTEND_EVENT_PROFILE_CHANGING:
+		dock->waitingForStop_ = false;
+		dock->automaticChange_ = false;
+		dock->stopTimeout_->stop();
+		dock->notice_.clear();
 		dock->profileChanging_ = true;
 		++dock->profileRevision_;
 		if (dock->picker_)
@@ -226,6 +315,9 @@ void FolderDock::onEvent(obs_frontend_event event, void *data)
 		++dock->profileRevision_;
 		break;
 	case OBS_FRONTEND_EVENT_EXIT:
+		dock->waitingForStop_ = false;
+		dock->automaticChange_ = false;
+		dock->stopTimeout_->stop();
 		dock->shuttingDown_ = true;
 		if (dock->picker_)
 			dock->picker_->reject();
@@ -234,4 +326,6 @@ void FolderDock::onEvent(obs_frontend_event event, void *data)
 		break;
 	}
 	dock->refresh();
+	if (dock->waitingForStop_)
+		QTimer::singleShot(0, dock, &FolderDock::continueFolderChange);
 }

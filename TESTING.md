@@ -17,6 +17,10 @@ Run `scripts/build-windows.ps1 -Test` to compile the plugin and run the native t
 
 The Windows DLL was also loaded against the locally installed OBS Studio 32.2.1 runtime (Qt 6.11.1), and its OBS module entry points were verified. Loading the DLL alone does not exercise docking or recording.
 
+## v1.1.0 automatic-mode coverage
+
+Tests exercise the real folder picker with controlled asynchronous output callbacks: default-off behavior, both stop requests, waiting for both stopped events, saving before replay restart, cancellation, idle outputs, and canceling pending work on profile changes.
+
 ## Remaining interactive OBS checks
 
 These require running the installed plugin inside OBS and have not been performed:
@@ -31,3 +35,5 @@ These require running the installed plugin inside OBS and have not been performe
 8. Close OBS with the dock or picker open and confirm a clean shutdown.
 
 macOS and Linux builds are not validated.
+
+9. Enable automatic mode while recording and replay are active. Choose a folder; verify both stop before the picker opens and only replay restarts after selecting a path. Confirm replay saves into the new folder. Cancel once and verify both remain stopped.

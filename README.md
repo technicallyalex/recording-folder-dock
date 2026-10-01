@@ -8,7 +8,7 @@ Download the Windows ZIP from [GitHub Releases](https://github.com/technicallyal
 
 Requires 64-bit OBS Studio 31.1 or newer. The Windows release is built against OBS 31.1.1 and Qt 6.8.3; it uses the Qt libraries supplied by OBS.
 
-1. Close OBS and extract `recording-folder-dock-windows-x64.zip`.
+1. Close OBS and extract `recording-folder-dock-1.1.0-windows-x64.zip`.
 2. Copy the extracted `recording-folder-dock` folder into `C:\ProgramData\obs-studio\plugins\`. Accept Windows's administrator prompt if shown. The DLL should end up at `C:\ProgramData\obs-studio\plugins\recording-folder-dock\bin\64bit\recording-folder-dock.dll`.
 3. Start OBS and enable **Docks > Recording Folder**.
 4. Click **Choose folder...** and select a folder. The displayed path is the saved destination. Drag the dock into your preferred position.
@@ -17,12 +17,18 @@ Alternatively, run the included `install-windows.ps1` from an Administrator Powe
 
 To uninstall, close OBS and remove only the `recording-folder-dock` plugin folder (or the DLL if installed in portable OBS). Your chosen recording destination remains saved in OBS.
 
+## Automatic folder changes (v1.1.0)
+
+Toggle **Auto-stop / restart replay** on, then click **Choose folder...**. The dock stops active recording and replay, waits for both to finish, and opens the folder picker. After a valid path is saved, it requests that OBS start the replay buffer. Recording stays stopped. Replay Buffer must be enabled in OBS Output Settings and supported by the current recording mode.
+
+Canceling the picker or failing to save leaves outputs stopped. Stopping replay discards its unsaved buffer. The toggle starts off each time OBS opens. **Open folder** continues to open File Explorer; it does not select a new recording path.
+
 ## Behavior
 
 - Saves immediately to the current profile's active output mode: Simple, Advanced Standard, or Advanced Custom FFmpeg with **Output to File** enabled.
 - Changes only the active mode's recording folder. Switching to another output mode shows that mode's existing folder.
 - Checks the folder exists and tests write access using a temporary file that is automatically removed. Unicode, spaces, and writable network folders are supported.
-- Disables changes while recording (including paused recordings) or the replay buffer is starting, active, or stopping. Replay recordings share OBS's recording folder, so subsequent replay sessions also use the selected folder.
+- With automatic mode off, disables changes while recording (including paused recordings) or the replay buffer is starting, active, or stopping. Replay recordings share OBS's recording folder, so subsequent replay sessions also use the selected folder.
 - Refreshes after profile changes and after Output Settings changes. Close OBS Settings before using the dock. A pending folder picker is canceled if the profile changes.
 - Custom FFmpeg output to a URL has no recording folder; the dock explains how to enable file output.
 - A failed profile save restores the previous in-memory setting and shows an error.
@@ -37,7 +43,7 @@ Install Visual Studio 2022 Build Tools with **Desktop development with C++**, a 
 .\scripts\build-windows.ps1 -Test
 ```
 
-The first build downloads official OBS sources and Qt/dependency archives specified and hash-pinned in `buildspec.json`. It builds, tests, and creates the installable ZIP in `dist`. No installation into OBS occurs during a build.
+The first build downloads official OBS sources and Qt/dependency archives specified and hash-pinned in `buildspec.json`. It builds, tests, and creates the installable ZIP in `dist`. No installation into OBS occurs during a build. Each version has its own build directory and ZIP; the packaging script refuses to overwrite an existing ZIP. The published v1.0.0 release remains available.
 
 Manual build:
 
