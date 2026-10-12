@@ -3,7 +3,7 @@
 
 #include <util/config-file.h>
 #include <QApplication>
-#include <QComboBox>
+#include <QMenu>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFileDialog>
@@ -62,38 +62,18 @@ FolderDock::FolderDock(QWidget *parent, const QString &settingsFile) : QWidget(p
 	buttons->addWidget(choose_);
 	buttons->addWidget(open_);
 	layout->addLayout(buttons);
-	presets_ = new QComboBox(this);
-	presets_->setObjectName("presetLocations");
-	presets_->setAccessibleName(tr("Preset folders"));
-	recents_ = new QComboBox(this);
-	recents_->setObjectName("recentLocations");
-	recents_->setAccessibleName(tr("Recent folders"));
-	usePreset_ = new QPushButton(tr("Use preset"), this);
-	usePreset_->setObjectName("usePreset");
-	useRecent_ = new QPushButton(tr("Use recent"), this);
-	useRecent_->setObjectName("useRecent");
-	editPresets_ = new QPushButton(tr("Edit presets..."), this);
+	editPresets_ = new QPushButton(tr("Presets..."), this);
 	editPresets_->setObjectName("editPresets");
-	clearRecent_ = new QPushButton(tr("Clear history"), this);
-	clearRecent_->setObjectName("clearHistory");
-	auto *presetRow = new QHBoxLayout;
-	presetRow->addWidget(presets_, 1);
-	presetRow->addWidget(usePreset_);
-	layout->addLayout(presetRow);
-	auto *recentRow = new QHBoxLayout;
-	recentRow->addWidget(recents_, 1);
-	recentRow->addWidget(useRecent_);
-	layout->addLayout(recentRow);
-	auto *manageRow = new QHBoxLayout;
-	manageRow->addWidget(editPresets_);
-	manageRow->addWidget(clearRecent_);
-	layout->addLayout(manageRow);
-	connect(usePreset_, &QPushButton::clicked, this, [this] { chooseFolder(presets_->currentData().toString()); });
-	connect(useRecent_, &QPushButton::clicked, this, [this] { chooseFolder(recents_->currentData().toString()); });
+	recents_ = new QPushButton(tr("Recents"), this);
+	recents_->setObjectName("recents");
+	recentMenu_ = new QMenu(recents_);
+	recents_->setMenu(recentMenu_);
+	auto *locationsRow = new QHBoxLayout;
+	locationsRow->addWidget(editPresets_);
+	locationsRow->addWidget(recents_);
+	layout->addLayout(locationsRow);
 	connect(editPresets_, &QPushButton::clicked, this, &FolderDock::editPresets);
-	connect(clearRecent_, &QPushButton::clicked, this, [this] {
-		recentPaths_.clear(); saveLocations(); updateLocations(); refresh();
-	});
+	connect(recentMenu_, &QMenu::aboutToShow, this, &FolderDock::updateLocations);
 	automatic_ = new QPushButton(tr("Auto-stop / restart replay"), this);
 	automatic_->setObjectName("automaticFolderChange");
 	automatic_->setCheckable(true);
@@ -178,10 +158,8 @@ void FolderDock::refresh()
 	}
 	const QString reason = unavailableReason(automatic_->isChecked());
 	choose_->setEnabled(reason.isEmpty() && !picker_ && !waitingForStop_);
-	usePreset_->setEnabled(choose_->isEnabled() && !presets_->currentData().toString().isEmpty());
-	useRecent_->setEnabled(choose_->isEnabled() && !recents_->currentData().toString().isEmpty());
 	editPresets_->setEnabled(!picker_ && !waitingForStop_ && !editor_);
-	clearRecent_->setEnabled(!recentPaths_.isEmpty() && !picker_ && !waitingForStop_);
+	recents_->setEnabled(!picker_ && !waitingForStop_ && !editor_);
 	automatic_->setEnabled(!picker_ && !waitingForStop_);
 	open_->setEnabled(!folder.isEmpty() && QFileInfo(folder).isDir());
 	status_->setText(waitingForStop_ ? tr("Waiting for recording and replay to finish stopping...") :

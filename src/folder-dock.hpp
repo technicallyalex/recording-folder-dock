@@ -8,7 +8,7 @@
 #include <QSettings>
 #include <memory>
 
-class QComboBox;
+class QMenu;
 class QDialog;
 
 class QFileDialog;
@@ -42,12 +42,9 @@ private:
 	QPushButton *choose_;
 	QPushButton *open_;
 	QPushButton *automatic_;
-	QComboBox *presets_;
-	QComboBox *recents_;
-	QPushButton *usePreset_;
-	QPushButton *useRecent_;
 	QPushButton *editPresets_;
-	QPushButton *clearRecent_;
+	QPushButton *recents_;
+	QMenu *recentMenu_;
 	QPointer<QDialog> editor_;
 	std::unique_ptr<QSettings> settings_;
 	QList<QPair<QString, QString>> locations_;

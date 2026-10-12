@@ -54,3 +54,7 @@ Tests recreate the dock with the same temporary settings file to verify enabled 
 
 Interactive checks: edit/add/remove presets, restart OBS, use an available and unavailable preset, and confirm the native picker and dock remain usable on Windows, native Linux, and Flatpak.
 
+
+## v1.3.1 compact controls
+
+Automated checks cover browsing into a preset, native-dialog eligibility, selecting a preset from its editor, recent menu ordering and reuse, and the bottom clear action. Interactive verification in OBS remains required for native dialog appearance on each desktop.

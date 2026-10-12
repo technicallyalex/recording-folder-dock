@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "folder-dock.hpp"
-#include <QComboBox>
+#include <QMenu>
+#include <QPersistentModelIndex>
+#include <QTimer>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -34,7 +36,6 @@ void FolderDock::loadLocations()
 		if (settings_->status() != QSettings::NoError)
 			notice_ = tr("Could not read saved dock preferences.");
 	}
-	updateLocations();
 }
 
 bool FolderDock::saveLocations()
@@ -60,25 +61,23 @@ bool FolderDock::saveLocations()
 
 void FolderDock::updateLocations()
 {
-	const auto selected = presets_->currentData().toString();
-	presets_->clear();
-	for (const auto &location : locations_) {
-		presets_->addItem(location.first, location.second);
-		presets_->setItemData(presets_->count() - 1, location.second, Qt::ToolTipRole);
+	recentMenu_->clear();
+	for (const auto &path : recentPaths_) {
+		auto *action = recentMenu_->addAction(QDir::toNativeSeparators(path).replace("&", "&&"));
+		action->setData(path);
+		action->setEnabled(unavailableReason(automatic_->isChecked()).isEmpty());
+		connect(action, &QAction::triggered, this, [this, path] { chooseFolder(path); });
 	}
-	if (locations_.isEmpty())
-		presets_->addItem(tr("No presets — select Edit presets"));
-	else if (presets_->findData(selected) >= 0)
-		presets_->setCurrentIndex(presets_->findData(selected));
-	recents_->clear();
-	for (const auto &path : recentPaths_)
-		recents_->addItem(QDir::toNativeSeparators(path), path);
 	if (recentPaths_.isEmpty())
-		recents_->addItem(tr("No recent folders"));
-	for (auto *combo : {presets_, recents_}) {
-		combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-		combo->setMinimumContentsLength(18);
-	}
+		recentMenu_->addAction(tr("No recent folders"))->setEnabled(false);
+	recentMenu_->addSeparator();
+	auto *clear = recentMenu_->addAction(tr("Clear recents"));
+	clear->setEnabled(!recentPaths_.isEmpty());
+	connect(clear, &QAction::triggered, this, [this] {
+		recentPaths_.clear();
+		saveLocations();
+		refresh();
+	});
 }
 
 void FolderDock::rememberFolder(const QString &folder)
@@ -96,7 +95,6 @@ void FolderDock::rememberFolder(const QString &folder)
 	while (recentPaths_.size() > 10)
 		recentPaths_.removeLast();
 	saveLocations();
-	updateLocations();
 }
 
 void FolderDock::editPresets()
@@ -116,6 +114,7 @@ void FolderDock::editPresets()
 	table->setHorizontalHeaderLabels({tr("Name"), tr("Folder path")});
 	table->horizontalHeader()->setStretchLastSection(true);
 	table->setSelectionBehavior(QAbstractItemView::SelectRows);
+	table->setSelectionMode(QAbstractItemView::SingleSelection);
 	for (int row = 0; row < locations_.size(); ++row) {
 		table->setItem(row, 0, new QTableWidgetItem(locations_[row].first));
 		table->setItem(row, 1, new QTableWidgetItem(locations_[row].second));
@@ -124,8 +123,29 @@ void FolderDock::editPresets()
 	auto *add = new QPushButton(tr("Add preset"), dialog);
 	add->setObjectName("addPreset");
 	auto *remove = new QPushButton(tr("Remove selected"), dialog);
-	layout->addWidget(add);
-	layout->addWidget(remove);
+	auto *browse = new QPushButton(tr("Browse..."), dialog);
+	browse->setObjectName("browsePreset");
+	auto *tools = new QHBoxLayout;
+	tools->addWidget(add);
+	tools->addWidget(remove);
+	tools->addWidget(browse);
+	tools->addStretch();
+	layout->addLayout(tools);
+	connect(browse, &QPushButton::clicked, dialog, [dialog, table] {
+		const int row = table->currentRow();
+		if (row < 0) return;
+		const QPersistentModelIndex cell(table->model()->index(row, 1));
+		auto *picker = new QFileDialog(dialog, tr("Choose preset folder"), cell.data().toString());
+		picker->setObjectName("presetFolderPicker");
+		picker->setAttribute(Qt::WA_DeleteOnClose);
+		picker->setFileMode(QFileDialog::Directory);
+		picker->setOption(QFileDialog::ShowDirsOnly);
+		connect(picker, &QDialog::accepted, dialog, [picker, table, cell] {
+			if (cell.isValid() && !picker->selectedFiles().isEmpty())
+				table->model()->setData(cell, QDir::toNativeSeparators(picker->selectedFiles().first()));
+		});
+		picker->open();
+	});
 	connect(add, &QPushButton::clicked, dialog, [table] {
 		if (table->rowCount() >= 50)
 			return;
@@ -145,9 +165,20 @@ void FolderDock::editPresets()
 	error->setWordWrap(true);
 	layout->addWidget(error);
 	auto *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, dialog);
+	auto *use = buttons->addButton(tr("Use selected"), QDialogButtonBox::ActionRole);
+	use->setObjectName("usePreset");
+	auto selectionChanged = [table, browse, remove, use] {
+		const bool selected = table->currentRow() >= 0;
+		browse->setEnabled(selected);
+		remove->setEnabled(selected);
+		use->setEnabled(selected);
+	};
+	connect(table, &QTableWidget::itemSelectionChanged, dialog, selectionChanged);
+	if (table->rowCount()) table->setCurrentCell(0, 0);
+	selectionChanged();
 	layout->addWidget(buttons);
 	connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-	connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, table, error] {
+	const auto save = [this, dialog, table, error](bool apply) {
 		QList<QPair<QString, QString>> entries;
 		QStringList names;
 		for (int row = 0; row < table->rowCount(); ++row) {
@@ -162,13 +193,21 @@ void FolderDock::editPresets()
 		}
 		locations_ = entries;
 		const bool saved = saveLocations();
-		updateLocations();
+
 		if (!saved) {
 			error->setText(notice_);
 			return;
 		}
+		const QString selected = apply && table->currentRow() >= 0 ? entries[table->currentRow()].second : QString();
+		const auto revision = profileRevision_;
 		dialog->accept();
-	});
+		if (!selected.isEmpty())
+			QTimer::singleShot(0, this, [this, selected, revision] {
+				if (revision == profileRevision_ && !shuttingDown_) chooseFolder(selected);
+			});
+	};
+	connect(buttons, &QDialogButtonBox::accepted, dialog, [save] { save(false); });
+	connect(use, &QPushButton::clicked, dialog, [save] { save(true); });
 	connect(dialog, &QObject::destroyed, this, [this] { refresh(); });
 	dialog->open();
 	refresh();
