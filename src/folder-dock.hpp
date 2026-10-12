@@ -4,6 +4,12 @@
 #include <obs-frontend-api.h>
 #include <QPointer>
 #include <QWidget>
+#include <QStringList>
+#include <QSettings>
+#include <memory>
+
+class QMenu;
+class QDialog;
 
 class QFileDialog;
 class QLabel;
@@ -13,22 +19,40 @@ class QTimer;
 
 class FolderDock final : public QWidget {
 public:
-	explicit FolderDock(QWidget *parent = nullptr);
+	explicit FolderDock(QWidget *parent = nullptr, const QString &settingsFile = {});
 	~FolderDock() override;
 	bool applyFolder(const QString &folder, QString &error);
 	void refresh();
 
 private:
 	static void onEvent(obs_frontend_event event, void *data);
-	void chooseFolder();
+	void chooseFolder(const QString &folder = {});
+	void selectDestination();
+	void finishSelection(const QString &folder);
+	void editPresets();
+	void loadLocations();
+	bool saveLocations();
+	void updateLocations();
+	void updatePresetMenu();
+	void rememberFolder(const QString &folder);
 	void openPicker();
 	void continueFolderChange();
 	QString unavailableReason(bool ignoreOutputs = false) const;
 	QLineEdit *path_;
-	QLabel *status_;
+	QLabel *folderAccess_;
 	QPushButton *choose_;
 	QPushButton *open_;
 	QPushButton *automatic_;
+	QPushButton *editPresets_;
+	QPushButton *presets_;
+	QMenu *presetMenu_;
+	QPushButton *recents_;
+	QMenu *recentMenu_;
+	QPointer<QDialog> editor_;
+	std::unique_ptr<QSettings> settings_;
+	QList<QPair<QString, QString>> locations_;
+	QStringList recentPaths_;
+	QString pendingFolder_;
 	QTimer *stopTimeout_;
 	bool waitingForStop_ = false;
 	bool automaticChange_ = false;

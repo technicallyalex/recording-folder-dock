@@ -2,12 +2,16 @@
 #include "folder-dock.hpp"
 #include <util/config-file.h>
 #include <QApplication>
+#include <QMenu>
+#include <QDialogButtonBox>
+#include <QTableWidget>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
 #include <QPushButton>
 #include <QTimer>
 #include <QLineEdit>
+#include <QLabel>
 #include <QTemporaryDir>
 #include <cstdio>
 #include <cstdlib>
@@ -82,6 +86,16 @@ int main(int argc, char **argv)
 		check(get("SimpleOutput", "FilePath") == expected, "Unicode path preserved");
 		check(get("AdvOut", "RecFilePath") == "unchanged advanced", "inactive mode unchanged");
 		check(dock.findChild<QLineEdit *>("recordingFolderPath")->text() == expected, "dock displays saved path");
+		auto *access = dock.findChild<QLabel *>("folderAccess");
+		check(access && access->text() == QString(QChar(0x2713)), "available folder shows checkmark");
+		config_set_string(profile, "SimpleOutput", "FilePath", temp.filePath("offline").toUtf8().constData());
+		dock.refresh();
+		check(access->text() == QString(QChar(0x00D7)), "missing folder shows cross");
+		check(QDir().mkpath(temp.filePath("offline")), "restore folder");
+		dock.refresh();
+		check(access->text() == QString(QChar(0x2713)), "availability recovers without changing path");
+		config_set_string(profile, "SimpleOutput", "FilePath", expected.toUtf8().constData());
+		dock.refresh();
 		config_t *saved = nullptr;
 		check(config_open(&saved, ini.toUtf8().constData(), CONFIG_OPEN_EXISTING) == CONFIG_SUCCESS, "reopen profile");
 		check(QString::fromUtf8(config_get_string(saved, "SimpleOutput", "FilePath")) == expected, "persisted on disk");
@@ -197,6 +211,87 @@ int main(int argc, char **argv)
 		check(!dock.applyFolder(folder, error), "shutdown blocks writes");
 	}
 	check(callback == nullptr, "callback removed on destruction");
+	config_close(profile);
+	check(config_open(&profile, temp.filePath("preferences-profile.ini").toUtf8().constData(), CONFIG_OPEN_ALWAYS) == CONFIG_SUCCESS,
+	      "open preference test profile");
+	const QString preferences = temp.filePath("dock-settings.ini");
+	{
+		FolderDock dock(nullptr, preferences);
+		dock.findChild<QPushButton *>("automaticFolderChange")->setChecked(true);
+		dock.findChild<QPushButton *>("editPresets")->click();
+		auto *editor = dock.findChild<QDialog *>("presetEditor");
+		check(editor != nullptr, "preset editor opens");
+		editor->findChild<QPushButton *>("addPreset")->click();
+		auto *table = editor->findChild<QTableWidget *>("presetTable");
+		table->item(0, 0)->setText("Game capture");
+		editor->findChild<QPushButton *>("browsePreset")->click();
+		auto *browser = editor->findChild<QFileDialog *>("presetFolderPicker");
+		check(browser != nullptr, "preset browse opens folder picker");
+		check(!browser->testOption(QFileDialog::DontUseNativeDialog), "preset browse permits native dialog");
+		browser->findChild<QLineEdit *>("fileNameEdit")->setText(folder);
+		QMetaObject::invokeMethod(browser, "done", Qt::DirectConnection, Q_ARG(int, QDialog::Accepted));
+		check(table->item(0, 1)->text() == QDir::toNativeSeparators(folder), "browse fills preset path");
+		QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+		editor->findChild<QPushButton *>("addPreset")->click();
+		table->item(1, 0)->setText("New folder");
+		table->item(1, 1)->setText(ini);
+		editor->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Save)->click();
+		check(editor->isVisible(), "file collision keeps editor open");
+		const QString newPresetPath = temp.filePath("new-parent/new-recordings");
+		table->item(1, 1)->setText(newPresetPath);
+		editor->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Save)->click();
+		check(QFileInfo(newPresetPath).isDir(), "saving preset creates missing parents and folder");
+		QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+		check(QSettings(preferences, QSettings::IniFormat).value("presets/1/name").toString() == "Game capture", "named preset saved");
+		check(dock.applyFolder(folder, error), "history records valid folder");
+		check(dock.applyFolder(folder, error), "reusing folder succeeds");
+		check(QSettings(preferences, QSettings::IniFormat).value("recentPaths").toStringList().size() == 1, "history deduplicates paths");
+		check(!dock.applyFolder(temp.filePath("absent"), error), "invalid history path rejected");
+		check(QSettings(preferences, QSettings::IniFormat).value("recentPaths").toStringList().size() == 1, "failed selection excluded from history");
+	}
+	{
+		const int startsBefore = startReplayCalls;
+		FolderDock dock(nullptr, preferences);
+		check(dock.findChild<QPushButton *>("automaticFolderChange")->isChecked(), "automatic toggle survives restart");
+		check(startReplayCalls == startsBefore, "loading enabled toggle does not start replay");
+		check(QSettings(preferences, QSettings::IniFormat).value("presets/1/name").toString() == "Game capture", "presets survive restart");
+		check(QSettings(preferences, QSettings::IniFormat).value("recentPaths").toStringList().value(0) == folder, "history survives restart");
+		recording = replay = true;
+		dock.refresh();
+		auto *presets = dock.findChild<QPushButton *>("presets")->menu();
+		QMetaObject::invokeMethod(presets, "aboutToShow");
+		check(presets->actions().first()->text() == "Game capture", "preset menu shows saved name");
+		presets->actions().first()->trigger();
+		QApplication::processEvents();
+		check(startReplayCalls == startsBefore, "preset waits for output stops");
+		recording = replay = false;
+		event(OBS_FRONTEND_EVENT_RECORDING_STOPPED);
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED);
+		QApplication::processEvents();
+		check(startReplayCalls == startsBefore + 1, "preset follows automatic restart workflow");
+		check(!dock.findChild<QFileDialog *>(), "preset bypasses picker");
+		dock.findChild<QPushButton *>("automaticFolderChange")->setChecked(false);
+		for (int i = 0; i < 12; ++i) {
+			const QString path = temp.filePath(QString("history-%1").arg(i));
+			check(QDir().mkpath(path) && dock.applyFolder(path, error), "history folder applied");
+		}
+		check(QSettings(preferences, QSettings::IniFormat).value("recentPaths").toStringList().size() == 10, "history is limited to ten entries");
+		auto *recent = dock.findChild<QPushButton *>("recents")->menu();
+		QMetaObject::invokeMethod(recent, "aboutToShow");
+		check(recent->actions().size() == 12, "flyout contains ten folders, separator and clear action");
+		const auto chosen = recent->actions()[3]->data().toString();
+		recent->actions()[3]->trigger();
+		check(get("SimpleOutput", "FilePath") == QDir::toNativeSeparators(chosen), "recent path can be reused");
+		QMetaObject::invokeMethod(recent, "aboutToShow");
+		check(recent->actions().first()->data().toString() == chosen, "reused path moves to top");
+		check(recent->actions().last()->text() == "Clear recents", "clear action is at bottom");
+		recent->actions().last()->trigger();
+	}
+	{
+		FolderDock dock(nullptr, preferences);
+		check(!dock.findChild<QPushButton *>("automaticFolderChange")->isChecked(), "disabled toggle survives restart");
+		check(QSettings(preferences, QSettings::IniFormat).value("recentPaths").toStringList().value(0).isEmpty(), "history clearing persists");
+	}
 	config_close(profile);
 	std::printf("PASS: %d checks\n", checks);
 	return 0;

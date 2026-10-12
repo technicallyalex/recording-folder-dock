@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <obs-module.h>
 #include "folder-dock.hpp"
+#include <QFileInfo>
+#include <QDir>
 
 OBS_DECLARE_MODULE()
 
@@ -28,7 +30,12 @@ void obs_module_post_load(void)
 {
 	if (!obs_frontend_get_main_window())
 		return;
-	dock = new FolderDock;
+	char *configPath = obs_module_config_path("settings.ini");
+	const QString settingsFile = QString::fromUtf8(configPath ? configPath : "");
+	bfree(configPath);
+	if (!settingsFile.isEmpty())
+		QDir().mkpath(QFileInfo(settingsFile).absolutePath());
+	dock = new FolderDock(nullptr, settingsFile);
 	if (!obs_frontend_add_dock_by_id(DockId, "Recording Folder", dock.data())) {
 		delete dock.data();
 		blog(LOG_WARNING, "[recording-folder-dock] Could not register dock");
