@@ -77,7 +77,9 @@ FolderDock::FolderDock(QWidget *parent, const QString &settingsFile) : QWidget(p
 	editPresets_->setObjectName("editPresets");
 	editPresets_->setAccessibleName(tr("Configure presets"));
 	editPresets_->setToolTip(tr("Add or edit preset folders"));
-	editPresets_->setFixedWidth(30);
+	// Let the active OBS theme include its padding in the button's size hint.
+	editPresets_->setMinimumWidth(40);
+	editPresets_->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
 	recents_ = new QPushButton(tr("Recents"), this);
 	recents_->setObjectName("recents");
 	recentMenu_ = new QMenu(recents_);
@@ -85,8 +87,8 @@ FolderDock::FolderDock(QWidget *parent, const QString &settingsFile) : QWidget(p
 	auto *locationsRow = new QHBoxLayout;
 	locationsRow->addWidget(presets_, 1);
 	locationsRow->addWidget(editPresets_);
-	locationsRow->addWidget(recents_, 1);
 	layout->addLayout(locationsRow);
+	layout->addWidget(recents_);
 	connect(editPresets_, &QPushButton::clicked, this, &FolderDock::editPresets);
 	connect(recentMenu_, &QMenu::aboutToShow, this, &FolderDock::updateLocations);
 	connect(presetMenu_, &QMenu::aboutToShow, this, &FolderDock::updatePresetMenu);
