@@ -62,18 +62,27 @@ FolderDock::FolderDock(QWidget *parent, const QString &settingsFile) : QWidget(p
 	buttons->addWidget(choose_);
 	buttons->addWidget(open_);
 	layout->addLayout(buttons);
-	editPresets_ = new QPushButton(tr("Presets..."), this);
+	presets_ = new QPushButton(tr("Presets"), this);
+	presets_->setObjectName("presets");
+	presetMenu_ = new QMenu(presets_);
+	presets_->setMenu(presetMenu_);
+	editPresets_ = new QPushButton(tr("+"), this);
 	editPresets_->setObjectName("editPresets");
+	editPresets_->setAccessibleName(tr("Configure presets"));
+	editPresets_->setToolTip(tr("Add or edit preset folders"));
+	editPresets_->setFixedWidth(30);
 	recents_ = new QPushButton(tr("Recents"), this);
 	recents_->setObjectName("recents");
 	recentMenu_ = new QMenu(recents_);
 	recents_->setMenu(recentMenu_);
 	auto *locationsRow = new QHBoxLayout;
+	locationsRow->addWidget(presets_, 1);
 	locationsRow->addWidget(editPresets_);
-	locationsRow->addWidget(recents_);
+	locationsRow->addWidget(recents_, 1);
 	layout->addLayout(locationsRow);
 	connect(editPresets_, &QPushButton::clicked, this, &FolderDock::editPresets);
 	connect(recentMenu_, &QMenu::aboutToShow, this, &FolderDock::updateLocations);
+	connect(presetMenu_, &QMenu::aboutToShow, this, &FolderDock::updatePresetMenu);
 	automatic_ = new QPushButton(tr("Auto-stop / restart replay"), this);
 	automatic_->setObjectName("automaticFolderChange");
 	automatic_->setCheckable(true);
@@ -89,9 +98,6 @@ FolderDock::FolderDock(QWidget *parent, const QString &settingsFile) : QWidget(p
 		notice_ = tr("OBS has not finished stopping. No folder was changed; try again once outputs stop.");
 		refresh();
 	});
-	status_ = new QLabel(this);
-	status_->setWordWrap(true);
-	layout->addWidget(status_);
 	layout->addStretch();
 	loadLocations();
 	connect(choose_, &QPushButton::clicked, this, [this] { chooseFolder(); });
@@ -160,12 +166,10 @@ void FolderDock::refresh()
 	choose_->setEnabled(reason.isEmpty() && !picker_ && !waitingForStop_);
 	editPresets_->setEnabled(!picker_ && !waitingForStop_ && !editor_);
 	recents_->setEnabled(!picker_ && !waitingForStop_ && !editor_);
+	presets_->setEnabled(!picker_ && !waitingForStop_ && !editor_);
 	automatic_->setEnabled(!picker_ && !waitingForStop_);
 	open_->setEnabled(!folder.isEmpty() && QFileInfo(folder).isDir());
-	status_->setText(waitingForStop_ ? tr("Waiting for recording and replay to finish stopping...") :
-		!notice_.isEmpty() ? notice_ : !reason.isEmpty() ? reason : automatic_->isChecked() ?
-		tr("Choose folder stops recording and replay; saving a folder starts replay. Unsaved replay footage is discarded.") :
-		tr("Applies to the next recording in this OBS profile."));
+	setToolTip(!notice_.isEmpty() ? notice_ : reason);
 }
 
 bool FolderDock::applyFolder(const QString &folder, QString &error)

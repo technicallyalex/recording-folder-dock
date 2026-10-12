@@ -59,6 +59,21 @@ bool FolderDock::saveLocations()
 	return true;
 }
 
+void FolderDock::updatePresetMenu()
+{
+	presetMenu_->clear();
+	for (const auto &location : locations_) {
+		const QString path = location.second;
+		auto *action = presetMenu_->addAction(QString(location.first).replace("&", "&&"));
+		action->setData(path);
+		action->setToolTip(QDir::toNativeSeparators(path));
+		action->setEnabled(unavailableReason(automatic_->isChecked()).isEmpty());
+		connect(action, &QAction::triggered, this, [this, path] { chooseFolder(path); });
+	}
+	if (locations_.isEmpty())
+		presetMenu_->addAction(tr("No presets — use + to add one"))->setEnabled(false);
+}
+
 void FolderDock::updateLocations()
 {
 	recentMenu_->clear();

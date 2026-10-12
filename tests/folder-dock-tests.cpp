@@ -239,8 +239,10 @@ int main(int argc, char **argv)
 		check(QSettings(preferences, QSettings::IniFormat).value("recentPaths").toStringList().value(0) == folder, "history survives restart");
 		recording = replay = true;
 		dock.refresh();
-		dock.findChild<QPushButton *>("editPresets")->click();
-		dock.findChild<QPushButton *>("usePreset")->click();
+		auto *presets = dock.findChild<QPushButton *>("presets")->menu();
+		QMetaObject::invokeMethod(presets, "aboutToShow");
+		check(presets->actions().first()->text() == "Game capture", "preset menu shows saved name");
+		presets->actions().first()->trigger();
 		QApplication::processEvents();
 		check(startReplayCalls == startsBefore, "preset waits for output stops");
 		recording = replay = false;
