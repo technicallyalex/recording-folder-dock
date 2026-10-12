@@ -2,6 +2,9 @@
 #include "folder-dock.hpp"
 #include <util/config-file.h>
 #include <QApplication>
+#include <QComboBox>
+#include <QDialogButtonBox>
+#include <QTableWidget>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
@@ -197,6 +200,66 @@ int main(int argc, char **argv)
 		check(!dock.applyFolder(folder, error), "shutdown blocks writes");
 	}
 	check(callback == nullptr, "callback removed on destruction");
+	config_close(profile);
+	check(config_open(&profile, temp.filePath("preferences-profile.ini").toUtf8().constData(), CONFIG_OPEN_ALWAYS) == CONFIG_SUCCESS,
+	      "open preference test profile");
+	const QString preferences = temp.filePath("dock-settings.ini");
+	{
+		FolderDock dock(nullptr, preferences);
+		dock.findChild<QPushButton *>("automaticFolderChange")->setChecked(true);
+		dock.findChild<QPushButton *>("editPresets")->click();
+		auto *editor = dock.findChild<QDialog *>("presetEditor");
+		check(editor != nullptr, "preset editor opens");
+		editor->findChild<QPushButton *>("addPreset")->click();
+		auto *table = editor->findChild<QTableWidget *>("presetTable");
+		table->item(0, 0)->setText("Game capture");
+		table->item(0, 1)->setText(folder);
+		editor->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Save)->click();
+		QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+		check(dock.findChild<QComboBox *>("presetLocations")->currentText() == "Game capture", "named preset saved");
+		check(dock.applyFolder(folder, error), "history records valid folder");
+		check(dock.applyFolder(folder, error), "reusing folder succeeds");
+		check(dock.findChild<QComboBox *>("recentLocations")->count() == 1, "history deduplicates paths");
+		check(!dock.applyFolder(temp.filePath("absent"), error), "invalid history path rejected");
+		check(dock.findChild<QComboBox *>("recentLocations")->count() == 1, "failed selection excluded from history");
+	}
+	{
+		const int startsBefore = startReplayCalls;
+		FolderDock dock(nullptr, preferences);
+		check(dock.findChild<QPushButton *>("automaticFolderChange")->isChecked(), "automatic toggle survives restart");
+		check(startReplayCalls == startsBefore, "loading enabled toggle does not start replay");
+		check(dock.findChild<QComboBox *>("presetLocations")->currentText() == "Game capture", "presets survive restart");
+		check(dock.findChild<QComboBox *>("recentLocations")->currentData().toString() == folder, "history survives restart");
+		recording = replay = true;
+		dock.refresh();
+		dock.findChild<QPushButton *>("usePreset")->click();
+		QApplication::processEvents();
+		check(startReplayCalls == startsBefore, "preset waits for output stops");
+		recording = replay = false;
+		event(OBS_FRONTEND_EVENT_RECORDING_STOPPED);
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED);
+		QApplication::processEvents();
+		check(startReplayCalls == startsBefore + 1, "preset follows automatic restart workflow");
+		check(!dock.findChild<QFileDialog *>(), "preset bypasses picker");
+		dock.findChild<QPushButton *>("automaticFolderChange")->setChecked(false);
+		for (int i = 0; i < 12; ++i) {
+			const QString path = temp.filePath(QString("history-%1").arg(i));
+			check(QDir().mkpath(path) && dock.applyFolder(path, error), "history folder applied");
+		}
+		check(dock.findChild<QComboBox *>("recentLocations")->count() == 10, "history is limited to ten entries");
+		auto *recent = dock.findChild<QComboBox *>("recentLocations");
+		recent->setCurrentIndex(3);
+		const auto chosen = recent->currentData().toString();
+		dock.findChild<QPushButton *>("useRecent")->click();
+		check(get("SimpleOutput", "FilePath") == QDir::toNativeSeparators(chosen), "recent path can be reused");
+		check(recent->currentData().toString() == chosen, "reused path moves to top");
+		dock.findChild<QPushButton *>("clearHistory")->click();
+	}
+	{
+		FolderDock dock(nullptr, preferences);
+		check(!dock.findChild<QPushButton *>("automaticFolderChange")->isChecked(), "disabled toggle survives restart");
+		check(dock.findChild<QComboBox *>("recentLocations")->currentData().toString().isEmpty(), "history clearing persists");
+	}
 	config_close(profile);
 	std::printf("PASS: %d checks\n", checks);
 	return 0;

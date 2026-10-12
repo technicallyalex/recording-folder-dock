@@ -35,7 +35,7 @@ jobs:
         run: |
           sudo add-apt-repository --yes ppa:obsproject/obs-studio
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build g++ pkg-config python3 obs-studio qt6-base-dev
+          sudo apt-get install -y cmake ninja-build g++ pkg-config python3 obs-studio qt6-base-dev libsimde-dev
           dpkg -L obs-studio | grep -E 'include|cmake|pkgconfig'
       - name: Build, test, and package
         run: bash scripts/build-linux.sh

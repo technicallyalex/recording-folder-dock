@@ -35,14 +35,14 @@ if(ENABLE_QT)
 endif()
 
 target_compile_features(${CMAKE_PROJECT_NAME} PRIVATE cxx_std_17)
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp src/folder-dock.cpp src/folder-dock.hpp)
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.cpp src/folder-dock.cpp src/folder-locations.cpp src/folder-dock.hpp)
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
 
 option(BUILD_TESTING "Build recording destination tests" OFF)
 if(BUILD_TESTING)
   enable_testing()
-  add_executable(folder-dock-tests tests/folder-dock-tests.cpp src/folder-dock.cpp)
+  add_executable(folder-dock-tests tests/folder-dock-tests.cpp src/folder-dock.cpp src/folder-locations.cpp)
   target_include_directories(folder-dock-tests PRIVATE src $<TARGET_PROPERTY:OBS::obs-frontend-api,INTERFACE_INCLUDE_DIRECTORIES>)
   target_link_libraries(folder-dock-tests PRIVATE OBS::libobs Qt6::Widgets)
   add_test(NAME folder-dock-tests COMMAND folder-dock-tests -platform minimal)

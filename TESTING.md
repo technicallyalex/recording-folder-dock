@@ -47,3 +47,10 @@ Production uses the platform-native folder picker. The headless test application
 The workflow runs the same native test harness on Windows, Ubuntu 24.04 with the OBS PPA, and inside the stable OBS Flatpak runtime using its matching SDK. The combined download is produced only after all platform jobs succeed. Native package BUILD-INFO.txt records its build environment; the Flatpak job also saves OBS runtime metadata.
 
 Interactive Linux checks remain necessary: dock appearance and layout, desktop folder picker and cancellation on X11/Wayland, folder opening, actual recording/replay output, and folder access inside the Flatpak sandbox. Native binary compatibility is verified for the build environment, not every distribution. Other distributions should build against their own OBS/Qt libraries or use OBS Flatpak with the dedicated extension.
+
+## v1.3.0 preferences coverage
+
+Tests recreate the dock with the same temporary settings file to verify enabled and disabled toggle persistence, named presets, history retention and clearing. They check deduplication, a ten-entry history limit, failed path exclusion, history reuse, and that preset selection waits for outputs to stop before restarting replay. Loading preferences must not start outputs.
+
+Interactive checks: edit/add/remove presets, restart OBS, use an available and unavailable preset, and confirm the native picker and dock remain usable on Windows, native Linux, and Flatpak.
+

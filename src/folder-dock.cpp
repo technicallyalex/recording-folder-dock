@@ -3,6 +3,7 @@
 
 #include <util/config-file.h>
 #include <QApplication>
+#include <QComboBox>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFileDialog>
@@ -40,8 +41,10 @@ Destination destination(config_t *config)
 }
 } // namespace
 
-FolderDock::FolderDock(QWidget *parent) : QWidget(parent)
+FolderDock::FolderDock(QWidget *parent, const QString &settingsFile) : QWidget(parent)
 {
+	if (!settingsFile.isEmpty())
+		settings_ = std::make_unique<QSettings>(settingsFile, QSettings::IniFormat);
 	setMinimumWidth(250);
 	auto *layout = new QVBoxLayout(this);
 	auto *label = new QLabel(tr("Recording folder"), this);
@@ -59,12 +62,44 @@ FolderDock::FolderDock(QWidget *parent) : QWidget(parent)
 	buttons->addWidget(choose_);
 	buttons->addWidget(open_);
 	layout->addLayout(buttons);
+	presets_ = new QComboBox(this);
+	presets_->setObjectName("presetLocations");
+	presets_->setAccessibleName(tr("Preset folders"));
+	recents_ = new QComboBox(this);
+	recents_->setObjectName("recentLocations");
+	recents_->setAccessibleName(tr("Recent folders"));
+	usePreset_ = new QPushButton(tr("Use preset"), this);
+	usePreset_->setObjectName("usePreset");
+	useRecent_ = new QPushButton(tr("Use recent"), this);
+	useRecent_->setObjectName("useRecent");
+	editPresets_ = new QPushButton(tr("Edit presets..."), this);
+	editPresets_->setObjectName("editPresets");
+	clearRecent_ = new QPushButton(tr("Clear history"), this);
+	clearRecent_->setObjectName("clearHistory");
+	auto *presetRow = new QHBoxLayout;
+	presetRow->addWidget(presets_, 1);
+	presetRow->addWidget(usePreset_);
+	layout->addLayout(presetRow);
+	auto *recentRow = new QHBoxLayout;
+	recentRow->addWidget(recents_, 1);
+	recentRow->addWidget(useRecent_);
+	layout->addLayout(recentRow);
+	auto *manageRow = new QHBoxLayout;
+	manageRow->addWidget(editPresets_);
+	manageRow->addWidget(clearRecent_);
+	layout->addLayout(manageRow);
+	connect(usePreset_, &QPushButton::clicked, this, [this] { chooseFolder(presets_->currentData().toString()); });
+	connect(useRecent_, &QPushButton::clicked, this, [this] { chooseFolder(recents_->currentData().toString()); });
+	connect(editPresets_, &QPushButton::clicked, this, &FolderDock::editPresets);
+	connect(clearRecent_, &QPushButton::clicked, this, [this] {
+		recentPaths_.clear(); saveLocations(); updateLocations(); refresh();
+	});
 	automatic_ = new QPushButton(tr("Auto-stop / restart replay"), this);
 	automatic_->setObjectName("automaticFolderChange");
 	automatic_->setCheckable(true);
 	automatic_->setToolTip(tr("Choose folder stops recording and replay. After a folder is saved, replay starts again. Unsaved replay footage is discarded. Cancel leaves outputs stopped."));
 	layout->addWidget(automatic_);
-	connect(automatic_, &QPushButton::toggled, this, [this] { notice_.clear(); refresh(); });
+	connect(automatic_, &QPushButton::toggled, this, [this] { notice_.clear(); saveLocations(); refresh(); });
 	stopTimeout_ = new QTimer(this);
 	stopTimeout_->setSingleShot(true);
 	stopTimeout_->setInterval(30000);
@@ -78,7 +113,8 @@ FolderDock::FolderDock(QWidget *parent) : QWidget(parent)
 	status_->setWordWrap(true);
 	layout->addWidget(status_);
 	layout->addStretch();
-	connect(choose_, &QPushButton::clicked, this, &FolderDock::chooseFolder);
+	loadLocations();
+	connect(choose_, &QPushButton::clicked, this, [this] { chooseFolder(); });
 	connect(open_, &QPushButton::clicked, this, [this] {
 		if (!QDesktopServices::openUrl(QUrl::fromLocalFile(path_->text())))
 			QMessageBox::warning(this, tr("Recording Folder"), tr("Could not open this folder."));
@@ -96,6 +132,15 @@ FolderDock::FolderDock(QWidget *parent) : QWidget(parent)
 FolderDock::~FolderDock()
 {
 	obs_frontend_remove_event_callback(onEvent, this);
+	// Close dialogs while our state still exists; their destruction callbacks refresh the dock.
+	if (picker_) {
+		disconnect(picker_, nullptr, this, nullptr);
+		delete picker_.data();
+	}
+	if (editor_) {
+		disconnect(editor_, nullptr, this, nullptr);
+		delete editor_.data();
+	}
 }
 
 QString FolderDock::unavailableReason(bool ignoreOutputs) const
@@ -133,6 +178,10 @@ void FolderDock::refresh()
 	}
 	const QString reason = unavailableReason(automatic_->isChecked());
 	choose_->setEnabled(reason.isEmpty() && !picker_ && !waitingForStop_);
+	usePreset_->setEnabled(choose_->isEnabled() && !presets_->currentData().toString().isEmpty());
+	useRecent_->setEnabled(choose_->isEnabled() && !recents_->currentData().toString().isEmpty());
+	editPresets_->setEnabled(!picker_ && !waitingForStop_ && !editor_);
+	clearRecent_->setEnabled(!recentPaths_.isEmpty() && !picker_ && !waitingForStop_);
 	automatic_->setEnabled(!picker_ && !waitingForStop_);
 	open_->setEnabled(!folder.isEmpty() && QFileInfo(folder).isDir());
 	status_->setText(waitingForStop_ ? tr("Waiting for recording and replay to finish stopping...") :
@@ -173,18 +222,25 @@ bool FolderDock::applyFolder(const QString &folder, QString &error)
 		error = tr("Could not save the OBS profile. The recording folder has not been changed.");
 		return false;
 	}
+	rememberFolder(normalized);
 	refresh();
 	return true;
 }
 
-void FolderDock::chooseFolder()
+void FolderDock::chooseFolder(const QString &folder)
 {
 	if (!unavailableReason(automatic_->isChecked()).isEmpty() || picker_ || waitingForStop_)
 		return;
 	notice_.clear();
+	if (!folder.isEmpty() && (!QFileInfo(folder).isAbsolute() || !QFileInfo(folder).isDir())) {
+		notice_ = tr("That folder is unavailable. Edit the preset or choose an existing folder.");
+		refresh();
+		return;
+	}
+	pendingFolder_ = folder;
 	automaticChange_ = automatic_->isChecked();
 	if (!automaticChange_) {
-		openPicker();
+		selectDestination();
 		return;
 	}
 	waitingForStop_ = true;
@@ -219,7 +275,31 @@ void FolderDock::continueFolderChange()
 		refresh();
 		return;
 	}
-	openPicker();
+	selectDestination();
+}
+
+void FolderDock::selectDestination()
+{
+	if (pendingFolder_.isEmpty())
+		openPicker();
+	else {
+		const QString folder = pendingFolder_;
+		pendingFolder_.clear();
+		finishSelection(folder);
+	}
+}
+
+void FolderDock::finishSelection(const QString &folder)
+{
+	QString error;
+	if (!applyFolder(folder, error)) {
+		notice_ = error;
+	} else if (automaticChange_) {
+		obs_frontend_replay_buffer_start();
+		if (notice_.isEmpty())
+			notice_ = tr("Folder saved. Replay start requested; recording remains stopped.");
+	}
+	refresh();
 }
 
 void FolderDock::openPicker()
@@ -250,16 +330,8 @@ void FolderDock::openPicker()
 			return;
 		}
 		const auto selected = dialog->selectedFiles();
-		QString error;
-		if (!selected.isEmpty()) {
-			if (!applyFolder(selected.first(), error)) {
-				QMessageBox::warning(this, tr("Recording Folder"), error);
-			} else if (automaticChange_) {
-				// Never restart recording. OBS reports replay start errors through its normal UI.
-				obs_frontend_replay_buffer_start();
-				notice_ = tr("Folder saved. Replay start requested; recording remains stopped.");
-			}
-		}
+		if (!selected.isEmpty())
+			finishSelection(selected.first());
 	});
 	connect(dialog, &QFileDialog::rejected, this, [this] {
 		if (automaticChange_)
