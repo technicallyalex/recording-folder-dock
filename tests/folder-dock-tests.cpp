@@ -232,7 +232,15 @@ int main(int argc, char **argv)
 		QMetaObject::invokeMethod(browser, "done", Qt::DirectConnection, Q_ARG(int, QDialog::Accepted));
 		check(table->item(0, 1)->text() == QDir::toNativeSeparators(folder), "browse fills preset path");
 		QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+		editor->findChild<QPushButton *>("addPreset")->click();
+		table->item(1, 0)->setText("New folder");
+		table->item(1, 1)->setText(ini);
 		editor->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Save)->click();
+		check(editor->isVisible(), "file collision keeps editor open");
+		const QString newPresetPath = temp.filePath("new-parent/new-recordings");
+		table->item(1, 1)->setText(newPresetPath);
+		editor->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Save)->click();
+		check(QFileInfo(newPresetPath).isDir(), "saving preset creates missing parents and folder");
 		QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 		check(QSettings(preferences, QSettings::IniFormat).value("presets/1/name").toString() == "Game capture", "named preset saved");
 		check(dock.applyFolder(folder, error), "history records valid folder");

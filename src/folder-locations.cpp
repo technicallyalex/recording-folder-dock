@@ -123,7 +123,7 @@ void FolderDock::editPresets()
 	dialog->setAttribute(Qt::WA_DeleteOnClose);
 	dialog->resize(650, 350);
 	auto *layout = new QVBoxLayout(dialog);
-	layout->addWidget(new QLabel(tr("Enter a name and full folder path. Presets can refer to drives currently disconnected."), dialog));
+	layout->addWidget(new QLabel(tr("Enter a name and full folder path. Saving creates missing folders for new or changed paths."), dialog));
 	auto *table = new QTableWidget(static_cast<int>(locations_.size()), 2, dialog);
 	table->setObjectName("presetTable");
 	table->setHorizontalHeaderLabels({tr("Name"), tr("Folder path")});
@@ -177,6 +177,7 @@ void FolderDock::editPresets()
 				table->removeRow(row);
 	});
 	auto *error = new QLabel(dialog);
+	error->setTextFormat(Qt::PlainText);
 	error->setWordWrap(true);
 	layout->addWidget(error);
 	auto *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, dialog);
@@ -205,6 +206,17 @@ void FolderDock::editPresets()
 			}
 			names.append(name);
 			entries.append({name, QDir::toNativeSeparators(QDir::cleanPath(path))});
+		}
+		// Validate every row before creating anything. Unchanged presets may be offline.
+		for (const auto &entry : entries) {
+			bool knownPath = false;
+			for (const auto &existing : locations_)
+				if (existing.second == entry.second) knownPath = true;
+			if (!knownPath && !QFileInfo(entry.second).isDir() && !QDir().mkpath(entry.second)) {
+				error->setText(tr("Could not create folder for preset '%1': %2\nCheck the path, drive availability, and permissions.")
+					.arg(entry.first, entry.second));
+				return;
+			}
 		}
 		locations_ = entries;
 		const bool saved = saveLocations();
