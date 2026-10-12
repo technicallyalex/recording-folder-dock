@@ -39,6 +39,7 @@ private:
 	void continueFolderChange();
 	QString unavailableReason(bool ignoreOutputs = false) const;
 	QLineEdit *path_;
+	QLabel *folderAccess_;
 	QPushButton *choose_;
 	QPushButton *open_;
 	QPushButton *automatic_;

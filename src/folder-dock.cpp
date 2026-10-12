@@ -54,7 +54,14 @@ FolderDock::FolderDock(QWidget *parent, const QString &settingsFile) : QWidget(p
 	path_->setReadOnly(true);
 	path_->setAccessibleName(tr("Current recording folder"));
 	label->setBuddy(path_);
-	layout->addWidget(path_);
+	auto *pathRow = new QHBoxLayout;
+	pathRow->addWidget(path_, 1);
+	folderAccess_ = new QLabel(this);
+	folderAccess_->setObjectName("folderAccess");
+	folderAccess_->setAlignment(Qt::AlignCenter);
+	folderAccess_->setMinimumWidth(24);
+	pathRow->addWidget(folderAccess_);
+	layout->addLayout(pathRow);
 	auto *buttons = new QHBoxLayout;
 	choose_ = new QPushButton(tr("Choose folder..."), this);
 	choose_->setObjectName("chooseFolder");
@@ -168,7 +175,17 @@ void FolderDock::refresh()
 	recents_->setEnabled(!picker_ && !waitingForStop_ && !editor_);
 	presets_->setEnabled(!picker_ && !waitingForStop_ && !editor_);
 	automatic_->setEnabled(!picker_ && !waitingForStop_);
-	open_->setEnabled(!folder.isEmpty() && QFileInfo(folder).isDir());
+	const QFileInfo folderInfo(folder);
+	const bool accessible = !folder.isEmpty() && folderInfo.isAbsolute() &&
+		folderInfo.isDir() && folderInfo.isReadable() && folderInfo.isWritable();
+	folderAccess_->setText(accessible ? QString(QChar(0x2713)) : QString(QChar(0x00D7)));
+	folderAccess_->setStyleSheet(accessible ? "color: #28a745; font-size: 20px; font-weight: bold;" :
+		"color: #e55353; font-size: 20px; font-weight: bold;");
+	const QString accessDescription = accessible ? tr("Folder available (read/write access reported).") :
+		tr("Folder unavailable or access is restricted.");
+	folderAccess_->setToolTip(accessDescription);
+	folderAccess_->setAccessibleName(accessDescription);
+	open_->setEnabled(!folder.isEmpty() && folderInfo.isDir());
 	setToolTip(!notice_.isEmpty() ? notice_ : reason);
 }
 

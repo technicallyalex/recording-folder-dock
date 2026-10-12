@@ -11,6 +11,7 @@
 #include <QPushButton>
 #include <QTimer>
 #include <QLineEdit>
+#include <QLabel>
 #include <QTemporaryDir>
 #include <cstdio>
 #include <cstdlib>
@@ -85,6 +86,16 @@ int main(int argc, char **argv)
 		check(get("SimpleOutput", "FilePath") == expected, "Unicode path preserved");
 		check(get("AdvOut", "RecFilePath") == "unchanged advanced", "inactive mode unchanged");
 		check(dock.findChild<QLineEdit *>("recordingFolderPath")->text() == expected, "dock displays saved path");
+		auto *access = dock.findChild<QLabel *>("folderAccess");
+		check(access && access->text() == QString(QChar(0x2713)), "available folder shows checkmark");
+		config_set_string(profile, "SimpleOutput", "FilePath", temp.filePath("offline").toUtf8().constData());
+		dock.refresh();
+		check(access->text() == QString(QChar(0x00D7)), "missing folder shows cross");
+		check(QDir().mkpath(temp.filePath("offline")), "restore folder");
+		dock.refresh();
+		check(access->text() == QString(QChar(0x2713)), "availability recovers without changing path");
+		config_set_string(profile, "SimpleOutput", "FilePath", expected.toUtf8().constData());
+		dock.refresh();
 		config_t *saved = nullptr;
 		check(config_open(&saved, ini.toUtf8().constData(), CONFIG_OPEN_EXISTING) == CONFIG_SUCCESS, "reopen profile");
 		check(QString::fromUtf8(config_get_string(saved, "SimpleOutput", "FilePath")) == expected, "persisted on disk");
