@@ -68,7 +68,7 @@ void FolderDock::updatePresetMenu()
 		action->setData(path);
 		action->setToolTip(QDir::toNativeSeparators(path));
 		action->setEnabled(unavailableReason(automatic_->isChecked()).isEmpty());
-		connect(action, &QAction::triggered, this, [this, path] { chooseFolder(path); });
+		connect(action, &QAction::triggered, this, [this, path] { chooseFolder(path, true); });
 	}
 	if (locations_.isEmpty())
 		presetMenu_->addAction(tr("No presets — use + to add one"))->setEnabled(false);
@@ -230,7 +230,7 @@ void FolderDock::editPresets()
 		dialog->accept();
 		if (!selected.isEmpty())
 			QTimer::singleShot(0, this, [this, selected, revision] {
-				if (revision == profileRevision_ && !shuttingDown_) chooseFolder(selected);
+				if (revision == profileRevision_ && !shuttingDown_) chooseFolder(selected, true);
 			});
 	};
 	connect(buttons, &QDialogButtonBox::accepted, dialog, [save] { save(false); });

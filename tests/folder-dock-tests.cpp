@@ -261,7 +261,9 @@ int main(int argc, char **argv)
 		auto *presets = dock.findChild<QPushButton *>("presets")->menu();
 		QMetaObject::invokeMethod(presets, "aboutToShow");
 		check(presets->actions().first()->text() == "Game capture", "preset menu shows saved name");
+		check(QDir().rmdir(folder), "delete saved preset folder");
 		presets->actions().first()->trigger();
+		check(QFileInfo(folder).isDir(), "selecting preset recreates deleted folder");
 		QApplication::processEvents();
 		check(startReplayCalls == startsBefore, "preset waits for output stops");
 		recording = replay = false;
@@ -271,6 +273,16 @@ int main(int argc, char **argv)
 		check(startReplayCalls == startsBefore + 1, "preset follows automatic restart workflow");
 		check(!dock.findChild<QFileDialog *>(), "preset bypasses picker");
 		dock.findChild<QPushButton *>("automaticFolderChange")->setChecked(false);
+		check(QDir().rmdir(folder), "remove preset folder for collision test");
+		QFile collision(folder);
+		check(collision.open(QIODevice::WriteOnly), "create file blocking preset directory");
+		collision.close();
+		const QString previousFolder = get("SimpleOutput", "FilePath");
+		const int startsBeforeFailure = startReplayCalls;
+		presets->actions().first()->trigger();
+		check(get("SimpleOutput", "FilePath") == previousFolder && startReplayCalls == startsBeforeFailure,
+		      "failed recreation leaves recording settings and outputs unchanged");
+		check(QFile::remove(folder), "remove collision fixture");
 		for (int i = 0; i < 12; ++i) {
 			const QString path = temp.filePath(QString("history-%1").arg(i));
 			check(QDir().mkpath(path) && dock.applyFolder(path, error), "history folder applied");

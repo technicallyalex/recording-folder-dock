@@ -228,11 +228,19 @@ bool FolderDock::applyFolder(const QString &folder, QString &error)
 	return true;
 }
 
-void FolderDock::chooseFolder(const QString &folder)
+void FolderDock::chooseFolder(const QString &folder, bool createMissing)
 {
 	if (!unavailableReason(automatic_->isChecked()).isEmpty() || picker_ || waitingForStop_)
 		return;
 	notice_.clear();
+	if (createMissing && QFileInfo(folder).isAbsolute() && !QFileInfo(folder).isDir()) {
+		if (!QDir().mkpath(folder)) {
+			notice_ = tr("Could not recreate preset folder: %1. Check the path, drive availability, and permissions.")
+				.arg(QDir::toNativeSeparators(folder));
+			refresh();
+			return;
+		}
+	}
 	if (!folder.isEmpty() && (!QFileInfo(folder).isAbsolute() || !QFileInfo(folder).isDir())) {
 		notice_ = tr("That folder is unavailable. Edit the preset or choose an existing folder.");
 		refresh();

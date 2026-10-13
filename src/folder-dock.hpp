@@ -26,7 +26,7 @@ public:
 
 private:
 	static void onEvent(obs_frontend_event event, void *data);
-	void chooseFolder(const QString &folder = {});
+	void chooseFolder(const QString &folder = {}, bool createMissing = false);
 	void selectDestination();
 	void finishSelection(const QString &folder);
 	void editPresets();
