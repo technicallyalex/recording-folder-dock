@@ -1,4 +1,4 @@
-param([switch]$Test)
+param([switch]$Test, [switch]$Screenshots)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $cmake = Get-Command cmake -ErrorAction SilentlyContinue
@@ -23,11 +23,12 @@ try {
     $package = Join-Path $projectRoot "dist\recording-folder-dock-$version-windows-x64"
     if (Test-Path -LiteralPath "$package.zip") { throw "Package already exists: $package.zip. Bump the version to create a new release." }
     $testing = if ($Test) { 'ON' } else { 'OFF' }
-    & $cmake --preset windows-x64 -B $buildDir "-DBUILD_TESTING=$testing"
+    $capture = if ($Screenshots) { 'ON' } else { 'OFF' }
+    & $cmake --preset windows-x64 -B $buildDir "-DBUILD_TESTING=$testing" "-DBUILD_SCREENSHOTS=$capture"
     if ($LASTEXITCODE) { throw 'Configuration failed.' }
     & $cmake --build $buildDir --config RelWithDebInfo
     if ($LASTEXITCODE) { throw 'Build failed.' }
-    if ($Test) {
+    if ($Test -or $Screenshots) {
         $obsBin = Join-Path $projectRoot '.deps\obs-studio-31.1.1\build_x64\rundir\Release\bin\64bit'
         $qtRoot = Join-Path $projectRoot '.deps\obs-deps-qt6-2025-07-11-x64'
         $depsBin = Join-Path $projectRoot '.deps\obs-deps-2025-07-11-x64\bin'
@@ -35,8 +36,14 @@ try {
         $previousQtPlugins = $env:QT_PLUGIN_PATH
         $env:QT_PLUGIN_PATH = Join-Path $qtRoot 'plugins'
         try {
-            & (Join-Path (Split-Path $cmake) 'ctest.exe') --test-dir $buildDir -C RelWithDebInfo --output-on-failure
-            if ($LASTEXITCODE) { throw 'Tests failed.' }
+            if ($Test) {
+                & (Join-Path (Split-Path $cmake) 'ctest.exe') --test-dir $buildDir -C RelWithDebInfo --output-on-failure
+                if ($LASTEXITCODE) { throw 'Tests failed.' }
+            }
+            if ($Screenshots) {
+                & "$buildDir\RelWithDebInfo\folder-dock-screenshots.exe" -platform minimal:enable_fonts (Join-Path $projectRoot 'media')
+                if ($LASTEXITCODE) { throw 'Screenshot capture failed.' }
+            }
         } finally {
             $env:QT_PLUGIN_PATH = $previousQtPlugins
         }
@@ -44,7 +51,21 @@ try {
     & $cmake --install $buildDir --config RelWithDebInfo --prefix $package
     if ($LASTEXITCODE) { throw 'Packaging failed.' }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install-windows.ps1') -Destination $package
-    Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md'), (Join-Path $projectRoot 'TESTING.md'), (Join-Path $projectRoot 'LICENSE') -Destination $package
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'LICENSE') -Destination $package
+    @'
+Recording Folder Dock for Windows x64
+
+1. Close OBS and extract this ZIP.
+2. Copy recording-folder-dock into C:\ProgramData\obs-studio\plugins\.
+   Alternatively, run install-windows.ps1 in an Administrator PowerShell.
+3. Start OBS and enable Docks > Recording Folder.
+
+Requires 64-bit OBS 31.1 or newer. For portable OBS, copy the DLL into
+its obs-plugins\64bit folder instead. Install in only one location.
+
+Help: https://github.com/technicallyalex/recording-folder-dock
+'@ | Set-Content -LiteralPath (Join-Path $package 'INSTALL.txt')
+    Get-ChildItem -LiteralPath $package -Recurse -Filter *.pdb | Remove-Item
     Compress-Archive -Path "$package\*" -DestinationPath "$package.zip"
     Write-Host "Package ready: $package.zip"
 } finally {

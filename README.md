@@ -1,110 +1,56 @@
-# Recording Folder Dock for OBS
+# Recording Folder Dock
 
-A native dock with **Choose folder...** and **Open folder** buttons. Select a folder and OBS uses it for the next recording in the current profile. The dock follows OBS's theme and can be docked, floated, resized, or hidden.
+Change your OBS recording folder from a dock. Save presets, return to recent folders, and switch destinations without opening Output Settings.
 
-## Install on Windows
+[**Download**](https://github.com/technicallyalex/recording-folder-dock/releases/latest) · [Report an issue](https://github.com/technicallyalex/recording-folder-dock/issues) · [Build from source](docs/DEVELOPMENT.md)
 
-Download the Windows ZIP from [GitHub Releases](https://github.com/technicallyalex/recording-folder-dock/releases/latest).
+![Recording Folder dock with an available folder and automatic mode enabled](media/dock.png)
 
-Requires 64-bit OBS Studio 31.1 or newer. The Windows release is built against OBS 31.1.1 and Qt 6.8.3; it uses the Qt libraries supplied by OBS.
+## Features
 
-1. Close OBS and extract `recording-folder-dock-1.3.6-windows-x64.zip`.
-2. Copy the extracted `recording-folder-dock` folder into `C:\ProgramData\obs-studio\plugins\`. Accept Windows's administrator prompt if shown. The DLL should end up at `C:\ProgramData\obs-studio\plugins\recording-folder-dock\bin\64bit\recording-folder-dock.dll`.
-3. Start OBS and enable **Docks > Recording Folder**.
-4. Click **Choose folder...** and select a folder. The displayed path is the saved destination. Drag the dock into your preferred position.
+- **Choose folder** selects a destination; **Open folder** opens it in your file manager.
+- **Presets** applies a saved location. **+** opens configuration with folder browsing and manual paths. Saving a new path creates missing folders.
+- **Recents** lists the last ten successful destinations, with **Clear recents** at the bottom.
+- **Auto-stop / restart replay** stops recording and replay before a folder change, then starts replay after a successful selection. The toggle remembers its state.
+- A green **✓** indicates the folder exists and reports read/write access; a red **×** indicates it is unavailable or restricted.
 
-Alternatively, run the included `install-windows.ps1` from an Administrator PowerShell after extracting the ZIP. For a portable OBS installation, copy the DLL into that installation's `obs-plugins\64bit` folder instead. Do not install it in both locations.
+<details>
+<summary>Preset configuration and recent folders</summary>
 
-To uninstall, close OBS and remove only the `recording-folder-dock` plugin folder (or the DLL if installed in portable OBS). Your chosen recording destination remains saved in OBS.
+![Saved presets menu](media/preset-menu.png)
 
-The folder picker uses the standard Windows Explorer dialog on Windows (v1.1.1). It selects folders, rather than individual files.
+![Preset configuration with named folders and Browse](media/presets.png)
 
-## Automatic folder changes (v1.1.0)
+![Recent folders menu with Clear recents](media/recents.png)
 
-Toggle **Auto-stop / restart replay** on, then click **Choose folder...**. The dock stops active recording and replay, waits for both to finish, and opens the folder picker. After a valid path is saved, it requests that OBS start the replay buffer. Recording stays stopped. Replay Buffer must be enabled in OBS Output Settings and supported by the current recording mode.
+![Folder unavailable indicator](media/unavailable.png)
 
-Canceling the picker or failing to save leaves outputs stopped. Stopping replay discards its unsaved buffer. The toggle defaults off on first use and remembers your choice across OBS restarts. **Open folder** continues to open File Explorer; it does not select a new recording path.
+</details>
 
-## Behavior
+Screenshots show the plugin widgets with sample paths. Appearance follows your OBS theme.
 
-- Saves immediately to the current profile's active output mode: Simple, Advanced Standard, or Advanced Custom FFmpeg with **Output to File** enabled.
-- Changes only the active mode's recording folder. Switching to another output mode shows that mode's existing folder.
-- Checks the folder exists and tests write access using a temporary file that is automatically removed. Unicode, spaces, and writable network folders are supported.
-- With automatic mode off, disables changes while recording (including paused recordings) or the replay buffer is starting, active, or stopping. Replay recordings share OBS's recording folder, so subsequent replay sessions also use the selected folder.
-- Refreshes after profile changes and after Output Settings changes. Close OBS Settings before using the dock. A pending folder picker is canceled if the profile changes.
-- Custom FFmpeg output to a URL has no recording folder; the dock explains how to enable file output.
-- A failed profile save restores the previous in-memory setting and shows an error.
+## Installation
 
-This does not move existing recordings, change filename formatting, start a recording, or modify encoder settings. OBS filename formatting may create additional subfolders beneath the selected destination.
+Download the package for your OBS installation, close OBS, and follow the matching instructions:
 
-## Build from source
+| Platform | Package | Install |
+| --- | --- | --- |
+| Windows x64 | `windows-x64.zip` | Extract and copy `recording-folder-dock` into `C:\ProgramData\obs-studio\plugins\`. |
+| Native Linux x86-64 | `linux-x86_64.tar.gz` | Extract, then run `bash install-linux.sh` from the extracted folder. |
+| OBS Flatpak x86-64 | `flatpak-x86_64.flatpak` | Run `flatpak install --user ./recording-folder-dock-VERSION-flatpak-x86_64.flatpak`. |
 
-Install Visual Studio 2022 Build Tools with **Desktop development with C++**, a Windows 10/11 SDK, and **C++ CMake tools for Windows** (CMake 3.28+).
+Restart OBS and enable **Docks → Recording Folder**.
 
-```powershell
-.\scripts\build-windows.ps1 -Test
-```
+Windows requires 64-bit OBS 31.1 or newer. The native Linux package targets Ubuntu 24.04 with the OBS Project PPA; other distributions can [build from source](docs/DEVELOPMENT.md) or use OBS Flatpak. Flatpak folder access follows OBS's sandbox permissions.
 
-The first build downloads official OBS sources and Qt/dependency archives specified and hash-pinned in `buildspec.json`. It builds, tests, and creates the installable ZIP in `dist`. No installation into OBS occurs during a build. Each version has its own build directory and ZIP; the packaging script refuses to overwrite an existing ZIP. The published v1.0.0 release remains available.
+For portable Windows OBS, copy the DLL into its `obs-plugins\64bit` folder. To uninstall, close OBS and remove the installed plugin folder; Flatpak users can run `flatpak uninstall --user com.obsproject.Studio.Plugin.RecordingFolderDock`.
 
-Manual build:
+## Using the dock
 
-```powershell
-cmake --preset windows-x64
-cmake --build --preset windows-x64
-cmake --install build_x64 --config RelWithDebInfo --prefix dist/package
-```
+Folder changes apply to the current profile's recording output, including subsequent replay sessions. Presets, recents, and the automatic toggle are shared across profiles. Existing recordings stay where they are.
 
-Windows, native Ubuntu 24.04 x86-64, and the OBS Flatpak runtime have automated build jobs. macOS is not validated. See [TESTING.md](TESTING.md) for test coverage and remaining interactive checks.
+With automatic mode off, stop recording and replay before changing folders. With it on, recording stays stopped after a change; only replay restarts. **Canceling leaves outputs stopped, and stopping replay discards unsaved replay footage.** Enable Replay Buffer in OBS Output Settings to use automatic restart.
 
-## Development references
+The dock supports Simple, Advanced Standard, and Custom FFmpeg with **Output to File** enabled. Folder selection checks actual write access; the availability icon is a lightweight filesystem check.
 
-- [OBS frontend dock and profile APIs](https://docs.obsproject.com/reference-frontend-api)
-- [Official OBS plugin template](https://github.com/obsproject/obs-plugintemplate)
-- [OBS recording output implementation](https://github.com/obsproject/obs-studio/blob/31.1.1/frontend/utility/AdvancedOutput.cpp)
-
-GPL-2.0-or-later. See [LICENSE](LICENSE).
-
-Developed using ChatGPT
-
-## Linux and unified downloads (v1.3.6)
-
-The same source and feature set builds on Windows and Linux with one version number. The combined `recording-folder-dock-1.3.6-windows-linux.zip` contains all three packages. Extract and install only the package matching your OBS installation. A Windows DLL cannot load on Linux; Linux uses a shared library instead.
-
-### Native Linux OBS
-
-The prebuilt native package targets **Ubuntu 24.04 x86-64 with the OBS Project PPA**. Close OBS, extract the Linux tar.gz, and run `bash install-linux.sh` in the extracted directory. It installs without sudo into `${XDG_CONFIG_HOME:-$HOME/.config}/obs-studio/plugins/recording-folder-dock`. Open **Docks > Recording Folder**. `BUILD-INFO.txt` records the OBS/Qt versions and shared libraries used.
-
-For other native distributions (including Fedora and Arch), build against that distribution's installed OBS and Qt 6 development packages. The source uses OBS 30+ frontend APIs; use current supported OBS. Prerequisites: CMake 3.28+, Ninja, a C++17 compiler, pkg-config, Python 3, OBS development headers/libraries including the frontend API, and Qt 6 Widgets development files. On Ubuntu with the OBS PPA configured:
-
-```sh
-sudo apt install cmake ninja-build g++ pkg-config python3 obs-studio qt6-base-dev libsimde-dev libsimde-dev
-bash scripts/build-linux.sh
-```
-
-The OBS PPA package includes its development files; do not mix it with Ubuntu's separate `libobs-dev` package. Other distributions may package those headers separately.
-
-This runs the same test suite, then produces a native package matching the current machine. We do not claim that the Ubuntu binary works on every distribution or CPU architecture. Linux desktops use the Qt platform's native folder picker when available, with Qt's fallback otherwise.
-
-### OBS Flatpak (any distribution supporting Flatpak, x86-64)
-
-Install OBS from Flathub first, then install the dedicated extension bundle:
-
-```sh
-flatpak install --user ./recording-folder-dock-1.3.6-flatpak-x86_64.flatpak
-```
-
-Restart OBS and enable the dock. Use the Flatpak extension with Flatpak OBS, not the native Linux tar.gz. It is built against the stable OBS Flatpak and its matching SDK; updates that change OBS's runtime/ABI may require rebuilding the extension. Folder access follows OBS's existing sandbox permissions. This is a downloadable extension, not a Flathub store listing.
-
-To build it yourself, install `flatpak`, `flatpak-builder`, Python 3, and Git, commit your source changes, then run `bash scripts/build-flatpak.sh`. The script downloads OBS's stable runtime/SDK and builds the committed source. To uninstall: `flatpak uninstall --user com.obsproject.Studio.Plugin.RecordingFolderDock`.
-
-## Saved presets and recent folders (v1.3.6)
-
-- The **+** button beside **Presets** lets you add, rename, edit, or remove up to 50 named locations. Type an absolute folder path or select a row and click **Browse...**; saving a new or changed path creates missing folders (including parents). Creation failures keep the editor open with an error. Unchanged presets on disconnected drives remain saved.
-- Open **Presets** and choose a saved location to apply it directly. In the **+** configuration window, **Save** only saves your edits; **Use selected** saves and applies the selected row. Open **Recents** to choose one of the last 10 successful destinations. **Clear recents** is at the bottom of that menu.
-- Both buttons follow the automatic stop/replay behavior when that toggle is enabled. Missing folders are rejected before stopping outputs; write permissions are checked before the path is saved.
-- History is ordered newest first, removes duplicates, and excludes failed or canceled selections. **Clear recents** clears it permanently.
-- The toggle, presets, and history are saved immediately in the plugin's `settings.ini` in OBS's configuration folder. Preferences are shared across profiles; recording destinations are still saved in the active OBS profile. These local paths are not uploaded anywhere.
-
-
-The icon beside the current folder is green when the folder exists and reports read/write access, and red otherwise. It refreshes every second. This lightweight check does not test free space or guarantee network/ACL write access; applying a folder still performs an actual write check.
+Licensed under [GPL-2.0-or-later](LICENSE).

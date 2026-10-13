@@ -13,7 +13,20 @@ ctest --test-dir "$build_dir" --output-on-failure
 plugin="$build_dir/recording-folder-dock.so"
 install -Dm755 "$plugin" "$package/recording-folder-dock/bin/64bit/recording-folder-dock.so"
 cp -R data "$package/recording-folder-dock/data"
-cp scripts/install-linux.sh README.md TESTING.md LICENSE "$package/"
+cp scripts/install-linux.sh LICENSE "$package/"
+cat > "$package/INSTALL.txt" <<'EOF'
+Recording Folder Dock for native Linux
+
+1. Close OBS and extract this archive.
+2. Run: bash install-linux.sh
+3. Start OBS and enable Docks > Recording Folder.
+
+This binary targets Ubuntu 24.04 x86-64 with the OBS Project PPA.
+Other native distributions should build from source or use OBS Flatpak.
+BUILD-INFO.txt records the exact build dependencies.
+
+Help: https://github.com/technicallyalex/recording-folder-dock
+EOF
 {
     echo "Recording Folder Dock $version / Linux $arch"
     cat /etc/os-release
