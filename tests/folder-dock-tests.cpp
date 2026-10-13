@@ -10,6 +10,7 @@
 #include <QFileDialog>
 #include <QPushButton>
 #include <QTimer>
+#include <QEventLoop>
 #include <QLineEdit>
 #include <QLabel>
 #include <QTemporaryDir>
@@ -272,6 +273,23 @@ int main(int argc, char **argv)
 		QApplication::processEvents();
 		check(startReplayCalls == startsBefore + 1, "preset follows automatic restart workflow");
 		check(!dock.findChild<QFileDialog *>(), "preset bypasses picker");
+		check(QDir().rmdir(folder), "delete current preset between recordings");
+		QEventLoop recoveryWait;
+		QTimer::singleShot(250, &recoveryWait, &QEventLoop::quit);
+		recoveryWait.exec();
+		check(QFileInfo(folder).isDir(), "watcher restores active preset without selecting it");
+		check(startReplayCalls == startsBefore + 1, "folder recovery does not start outputs");
+		check(QDir().rmdir(folder), "delete active preset during replay use");
+		replay = true;
+		dock.refresh();
+		check(QFileInfo(folder).isDir(), "periodic recovery works while replay buffer is active");
+		replay = false;
+		const QString ordinaryFolder = temp.filePath("not-a-preset");
+		config_set_string(profile, "SimpleOutput", "FilePath", ordinaryFolder.toUtf8().constData());
+		dock.refresh();
+		check(!QFileInfo(ordinaryFolder).exists(), "automatic recovery only creates configured presets");
+		config_set_string(profile, "SimpleOutput", "FilePath", folder.toUtf8().constData());
+		dock.refresh();
 		dock.findChild<QPushButton *>("automaticFolderChange")->setChecked(false);
 		check(QDir().rmdir(folder), "remove preset folder for collision test");
 		QFile collision(folder);

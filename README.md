@@ -9,7 +9,7 @@ Change your OBS recording folder from a dock. Save presets, return to recent fol
 ## Features
 
 - **Choose folder** selects a destination; **Open folder** opens it in your file manager.
-- **Presets** applies a saved location. **+** opens configuration with folder browsing and manual paths. Saving a new path creates missing folders. Selecting a preset recreates its folder if it was deleted.
+- **Presets** applies a saved location. **+** opens configuration with folder browsing and manual paths. Saving a new path creates missing folders. The active preset folder is automatically recreated if deleted, keeping it ready for recording and replay saves.
 - **Recents** lists the last ten successful destinations, with **Clear recents** at the bottom.
 - **Auto-stop / restart replay** stops recording and replay before a folder change, then starts replay after a successful selection. The toggle remembers its state.
 - A green **✓** indicates the folder exists and reports read/write access; a red **×** indicates it is unavailable or restricted.
