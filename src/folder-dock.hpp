@@ -6,6 +6,7 @@
 #include <QWidget>
 #include <QStringList>
 #include <QSettings>
+#include <QElapsedTimer>
 #include <memory>
 
 class QMenu;
@@ -39,6 +40,7 @@ private:
 	void maintainPresetFolder(const QString &folder);
 	void openPicker();
 	void continueFolderChange();
+	void continueReplayRestart();
 	QString unavailableReason(bool ignoreOutputs = false) const;
 	QLineEdit *path_;
 	QFileSystemWatcher *folderWatcher_;
@@ -58,6 +60,13 @@ private:
 	QStringList recentPaths_;
 	QString pendingFolder_;
 	QTimer *stopTimeout_;
+	QTimer *changePoll_;
+	bool restartPending_ = false;
+	QElapsedTimer restartElapsed_;
+	int restartAttempts_ = 0;
+	unsigned long long restartRevision_ = 0;
+	QString restartFolder_;
+	QString restartKey_;
 	bool waitingForStop_ = false;
 	bool automaticChange_ = false;
 	bool recordingStopping_ = false;

@@ -101,6 +101,14 @@ FolderDock::FolderDock(QWidget *parent, const QString &settingsFile) : QWidget(p
 	stopTimeout_ = new QTimer(this);
 	stopTimeout_->setSingleShot(true);
 	stopTimeout_->setInterval(30000);
+	changePoll_ = new QTimer(this);
+	changePoll_->setInterval(250);
+	connect(changePoll_, &QTimer::timeout, this, [this] {
+		continueFolderChange();
+		continueReplayRestart();
+		if (!waitingForStop_ && !restartPending_) changePoll_->stop();
+		refresh();
+	});
 	connect(stopTimeout_, &QTimer::timeout, this, [this] {
 		waitingForStop_ = false;
 		automaticChange_ = false;
@@ -173,11 +181,11 @@ void FolderDock::refresh()
 		path_->setToolTip(folder);
 	}
 	const QString reason = unavailableReason(automatic_->isChecked());
-	choose_->setEnabled(reason.isEmpty() && !picker_ && !waitingForStop_);
-	editPresets_->setEnabled(!picker_ && !waitingForStop_ && !editor_);
-	recents_->setEnabled(!picker_ && !waitingForStop_ && !editor_);
-	presets_->setEnabled(!picker_ && !waitingForStop_ && !editor_);
-	automatic_->setEnabled(!picker_ && !waitingForStop_);
+	choose_->setEnabled(reason.isEmpty() && !picker_ && !waitingForStop_ && !restartPending_);
+	editPresets_->setEnabled(!picker_ && !waitingForStop_ && !restartPending_ && !editor_);
+	recents_->setEnabled(!picker_ && !waitingForStop_ && !restartPending_ && !editor_);
+	presets_->setEnabled(!picker_ && !waitingForStop_ && !restartPending_ && !editor_);
+	automatic_->setEnabled(!picker_ && !waitingForStop_ && !restartPending_);
 	const QFileInfo folderInfo(folder);
 	const bool accessible = !folder.isEmpty() && folderInfo.isAbsolute() &&
 		folderInfo.isDir() && folderInfo.isReadable() && folderInfo.isWritable();
@@ -270,7 +278,7 @@ bool FolderDock::applyFolder(const QString &folder, QString &error)
 
 void FolderDock::chooseFolder(const QString &folder, bool createMissing)
 {
-	if (!unavailableReason(automatic_->isChecked()).isEmpty() || picker_ || waitingForStop_)
+	if (!unavailableReason(automatic_->isChecked()).isEmpty() || picker_ || waitingForStop_ || restartPending_)
 		return;
 	notice_.clear();
 	if (createMissing && QFileInfo(folder).isAbsolute() && !QFileInfo(folder).isDir()) {
@@ -296,6 +304,7 @@ void FolderDock::chooseFolder(const QString &folder, bool createMissing)
 	stopRecordingRequested_ = false;
 	stopReplayRequested_ = false;
 	stopTimeout_->start();
+	changePoll_->start();
 	// Stop requests are asynchronous. Only open the picker after both STOPPED events.
 	continueFolderChange();
 	refresh();
@@ -344,11 +353,46 @@ void FolderDock::finishSelection(const QString &folder)
 	if (!applyFolder(folder, error)) {
 		notice_ = error;
 	} else if (automaticChange_) {
-		obs_frontend_replay_buffer_start();
-		if (notice_.isEmpty())
-			notice_ = tr("Folder saved. Replay start requested; recording remains stopped.");
+		restartPending_ = true;
+		restartAttempts_ = 0;
+		restartRevision_ = profileRevision_;
+		restartFolder_ = path_->text();
+		restartKey_ = QString::fromUtf8(destination(obs_frontend_get_profile_config()).key);
+		restartElapsed_.start();
+		changePoll_->start();
+		continueReplayRestart();
 	}
+	automaticChange_ = false;
 	refresh();
+}
+
+void FolderDock::continueReplayRestart()
+{
+	if (!restartPending_) return;
+	auto *config = obs_frontend_get_profile_config();
+	if (shuttingDown_ || profileChanging_ || restartRevision_ != profileRevision_ || !config ||
+	    QString::fromUtf8(destination(config).key) != restartKey_ ||
+	    QDir::fromNativeSeparators(value(config, destination(config).section, destination(config).key)) !=
+	    QDir::fromNativeSeparators(restartFolder_)) {
+		restartPending_ = false;
+		return;
+	}
+	if (obs_frontend_replay_buffer_active()) {
+		restartPending_ = false;
+		return;
+	}
+	if (restartElapsed_.elapsed() >= 10000) {
+		restartPending_ = false;
+		notice_ = tr("The folder was saved, but replay did not restart. Check OBS replay settings and any output error.");
+		return;
+	}
+	// STARTING means OBS accepted the request. Do not duplicate an in-flight start.
+	if (replayBusy_ || replayStopping_ || recordingBusy_ || obs_frontend_recording_active()) return;
+	if (!unavailableReason().isEmpty()) return;
+	if (restartAttempts_ < 3 && restartElapsed_.elapsed() >= restartAttempts_ * 1500) {
+		++restartAttempts_;
+		obs_frontend_replay_buffer_start();
+	}
 }
 
 void FolderDock::openPicker()
@@ -410,10 +454,12 @@ void FolderDock::onEvent(obs_frontend_event event, void *data)
 		break;
 	case OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTING:
 	case OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED:
+		if (event == OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED) dock->restartPending_ = false;
 		dock->replayStopping_ = false;
 		dock->replayBusy_ = true;
 		break;
 	case OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPING:
+		dock->restartPending_ = false;
 		dock->replayStopping_ = true;
 		dock->replayBusy_ = true;
 		break;
@@ -422,6 +468,7 @@ void FolderDock::onEvent(obs_frontend_event event, void *data)
 		dock->replayBusy_ = false;
 		break;
 	case OBS_FRONTEND_EVENT_PROFILE_CHANGING:
+		dock->restartPending_ = false;
 		dock->waitingForStop_ = false;
 		dock->automaticChange_ = false;
 		dock->stopTimeout_->stop();
@@ -436,6 +483,7 @@ void FolderDock::onEvent(obs_frontend_event event, void *data)
 		++dock->profileRevision_;
 		break;
 	case OBS_FRONTEND_EVENT_EXIT:
+		dock->restartPending_ = false;
 		dock->waitingForStop_ = false;
 		dock->automaticChange_ = false;
 		dock->stopTimeout_->stop();
