@@ -4,7 +4,7 @@ Change your OBS recording folder from a dock. Save presets, return to recent fol
 
 [**Download**](https://github.com/technicallyalex/recording-folder-dock/releases/latest) · [Report an issue](https://github.com/technicallyalex/recording-folder-dock/issues) · [Build from source](docs/DEVELOPMENT.md)
 
-![Recording Folder dock with an available folder and automatic mode enabled](media/dock.png)
+![Recording Folder Dock v1.3.10](media/dock.png)
 
 ## Features
 
@@ -13,21 +13,6 @@ Change your OBS recording folder from a dock. Save presets, return to recent fol
 - **Recents** lists the last ten successful destinations, with **Clear recents** at the bottom.
 - **Auto-stop / restart replay** stops recording and replay before a folder change, then starts replay after a successful selection. The toggle remembers its state.
 - A green **✓** indicates the folder exists and reports read/write access; a red **×** indicates it is unavailable or restricted.
-
-<details>
-<summary>Preset configuration and recent folders</summary>
-
-![Saved presets menu](media/preset-menu.png)
-
-![Preset configuration with named folders and Browse](media/presets.png)
-
-![Recent folders menu with Clear recents](media/recents.png)
-
-![Folder unavailable indicator](media/unavailable.png)
-
-</details>
-
-Screenshots show the plugin widgets with sample paths. Appearance follows your OBS theme.
 
 ## Installation
 
