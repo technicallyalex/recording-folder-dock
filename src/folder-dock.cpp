@@ -50,13 +50,10 @@ FolderDock::FolderDock(QWidget *parent, const QString &settingsFile) : QWidget(p
 	folderWatcher_ = new QFileSystemWatcher(this);
 	connect(folderWatcher_, &QFileSystemWatcher::directoryChanged, this, [this] { refresh(); });
 	auto *layout = new QVBoxLayout(this);
-	auto *label = new QLabel(tr("Recording folder"), this);
-	layout->addWidget(label);
 	path_ = new QLineEdit(this);
 	path_->setObjectName("recordingFolderPath");
 	path_->setReadOnly(true);
 	path_->setAccessibleName(tr("Current recording folder"));
-	label->setBuddy(path_);
 	auto *pathRow = new QHBoxLayout;
 	pathRow->addWidget(path_, 1);
 	folderAccess_ = new QLabel(this);

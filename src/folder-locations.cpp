@@ -127,6 +127,8 @@ void FolderDock::editPresets()
 	auto *table = new QTableWidget(static_cast<int>(locations_.size()), 2, dialog);
 	table->setObjectName("presetTable");
 	table->setHorizontalHeaderLabels({tr("Name"), tr("Folder path")});
+	table->verticalHeader()->hide();
+	table->setCornerButtonEnabled(false);
 	table->horizontalHeader()->setStretchLastSection(true);
 	table->setSelectionBehavior(QAbstractItemView::SelectRows);
 	table->setSelectionMode(QAbstractItemView::SingleSelection);
