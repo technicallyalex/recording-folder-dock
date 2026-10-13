@@ -1,4 +1,4 @@
-name: Windows and Linux builds
+name: Build and test
 
 on:
   push:
@@ -15,12 +15,12 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build, test, and package
         shell: pwsh
         run: ./scripts/build-windows.ps1 -Test
       - name: Upload Windows plugin
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: recording-folder-dock-windows-x64
           path: dist/recording-folder-dock-*-windows-x64.zip
@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install OBS and Qt development libraries
         run: |
           sudo add-apt-repository --yes ppa:obsproject/obs-studio
@@ -39,7 +39,7 @@ jobs:
           dpkg -L obs-studio | grep -E 'include|cmake|pkgconfig'
       - name: Build, test, and package
         run: bash scripts/build-linux.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: recording-folder-dock-linux-x86_64
           path: dist/recording-folder-dock-*-linux-x86_64.tar.gz
@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Flatpak build tools
         run: |
           sudo apt-get update
@@ -57,26 +57,8 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Build and test against OBS Flatpak runtime
         run: bash scripts/build-flatpak.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: recording-folder-dock-flatpak-x86_64
-          path: |
-            dist/recording-folder-dock-*-flatpak-x86_64.flatpak
-            dist/obs-flatpak-metadata.ini
-          if-no-files-found: error
-
-  combined:
-    needs: [build, linux, flatpak]
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          path: packages
-      - name: Create single download for both platforms
-        run: python3 scripts/package-combined.py packages dist
-      - uses: actions/upload-artifact@v4
-        with:
-          name: recording-folder-dock-windows-linux
-          path: dist/*
+          path: dist/recording-folder-dock-*-flatpak-x86_64.flatpak
           if-no-files-found: error
