@@ -76,7 +76,7 @@ int main(int argc, char **argv)
 	check(temp.isValid(), "temporary directory");
 	const QString ini = temp.filePath("profile.ini");
 	check(config_open(&profile, ini.toUtf8().constData(), CONFIG_OPEN_ALWAYS) == CONFIG_SUCCESS, "open profile");
-	const QString folder = temp.filePath(QString::fromUtf8("Recordings with spaces — 日本語"));
+	const QString folder = temp.filePath(QString::fromUtf8("Recordings with spaces â€” æ—¥æœ¬èªž"));
 	check(QDir().mkpath(folder), "create Unicode folder");
 	const QString expected = QDir::toNativeSeparators(folder);
 	QString error;
@@ -160,6 +160,8 @@ int main(int argc, char **argv)
 		QMetaObject::invokeMethod(picker, "done", Qt::DirectConnection, Q_ARG(int, QDialog::Accepted));
 		check(get("SimpleOutput", "FilePath") == QDir::toNativeSeparators(temp.path()), "picker saves selected path");
 		check(startReplayCalls == 1, "replay requested only after successful selection");
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED);
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED);
 		QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 		dock.refresh();
 		choose->click();
@@ -272,6 +274,8 @@ int main(int argc, char **argv)
 		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED);
 		QApplication::processEvents();
 		check(startReplayCalls == startsBefore + 1, "preset follows automatic restart workflow");
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED);
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED);
 		check(!dock.findChild<QFileDialog *>(), "preset bypasses picker");
 		check(QDir().rmdir(folder), "delete current preset between recordings");
 		QEventLoop recoveryWait;
@@ -321,6 +325,59 @@ int main(int argc, char **argv)
 		FolderDock dock(nullptr, preferences);
 		check(!dock.findChild<QPushButton *>("automaticFolderChange")->isChecked(), "disabled toggle survives restart");
 		check(QSettings(preferences, QSettings::IniFormat).value("recentPaths").toStringList().value(0).isEmpty(), "history clearing persists");
+	}
+	{
+		FolderDock dock(nullptr, preferences);
+		dock.findChild<QPushButton *>("automaticFolderChange")->setChecked(true);
+		auto *presets = dock.findChild<QPushButton *>("presets")->menu();
+		QMetaObject::invokeMethod(presets, "aboutToShow");
+		auto wait = [](int milliseconds) {
+			QEventLoop loop;
+			QTimer::singleShot(milliseconds, &loop, &QEventLoop::quit);
+			loop.exec();
+		};
+		const int before = startReplayCalls;
+		replay = true;
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED);
+		presets->actions().first()->trigger();
+		// STOPPED notification arrives before the frontend active flag settles.
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED);
+		QApplication::processEvents();
+		check(startReplayCalls == before, "stale active flag delays restart safely");
+		replay = false;
+		wait(400);
+		check(startReplayCalls == before + 1, "polling resumes after stop flag settles without another event");
+		check(!dock.findChild<QPushButton *>("presets")->isEnabled(), "switching is locked until replay restart confirms");
+		wait(1600);
+		check(startReplayCalls == before + 2, "ignored replay start request is retried");
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTING);
+		wait(1700);
+		check(startReplayCalls == before + 2, "accepted start is not duplicated while starting");
+		replay = true;
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED);
+		check(dock.findChild<QPushButton *>("presets")->isEnabled(), "confirmation unlocks preset controls");
+		wait(1700);
+		check(startReplayCalls == before + 2, "confirmed replay restart ends retries");
+		replay = false;
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED);
+		presets->actions().first()->trigger();
+		const int after = startReplayCalls;
+		event(OBS_FRONTEND_EVENT_PROFILE_CHANGING);
+		event(OBS_FRONTEND_EVENT_PROFILE_CHANGED);
+		wait(1700);
+		check(startReplayCalls == after, "profile change cancels outstanding replay restart");
+		presets->actions().first()->trigger();
+		const int beforeStop = startReplayCalls;
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPING);
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED);
+		wait(1700);
+		check(startReplayCalls == beforeStop, "user stop cancels pending restart retries");
+		const int beforeFailure = startReplayCalls;
+		presets->actions().first()->trigger();
+		wait(10500);
+		check(startReplayCalls == beforeFailure + 3, "failed replay restart attempts are bounded");
+		check(dock.findChild<QPushButton *>("presets")->isEnabled(), "restart timeout unlocks dock controls");
+		check(dock.toolTip().contains("did not restart"), "restart failure is reported");
 	}
 	config_close(profile);
 	std::printf("PASS: %d checks\n", checks);
