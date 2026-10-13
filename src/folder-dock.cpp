@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFileSystemWatcher>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -46,14 +47,13 @@ FolderDock::FolderDock(QWidget *parent, const QString &settingsFile) : QWidget(p
 	if (!settingsFile.isEmpty())
 		settings_ = std::make_unique<QSettings>(settingsFile, QSettings::IniFormat);
 	setMinimumWidth(250);
+	folderWatcher_ = new QFileSystemWatcher(this);
+	connect(folderWatcher_, &QFileSystemWatcher::directoryChanged, this, [this] { refresh(); });
 	auto *layout = new QVBoxLayout(this);
-	auto *label = new QLabel(tr("Recording folder"), this);
-	layout->addWidget(label);
 	path_ = new QLineEdit(this);
 	path_->setObjectName("recordingFolderPath");
 	path_->setReadOnly(true);
 	path_->setAccessibleName(tr("Current recording folder"));
-	label->setBuddy(path_);
 	auto *pathRow = new QHBoxLayout;
 	pathRow->addWidget(path_, 1);
 	folderAccess_ = new QLabel(this);
@@ -166,6 +166,7 @@ void FolderDock::refresh()
 		if (target.local)
 			folder = QDir::toNativeSeparators(value(config, target.section, target.key));
 	}
+	maintainPresetFolder(folder);
 	if (path_->text() != folder) {
 		path_->setText(folder);
 		path_->setCursorPosition(0);
@@ -189,6 +190,45 @@ void FolderDock::refresh()
 	folderAccess_->setAccessibleName(accessDescription);
 	open_->setEnabled(!folder.isEmpty() && folderInfo.isDir());
 	setToolTip(!notice_.isEmpty() ? notice_ : reason);
+}
+
+void FolderDock::maintainPresetFolder(const QString &folder)
+{
+	const QString normalized = QDir::cleanPath(QDir::fromNativeSeparators(folder));
+#ifdef Q_OS_WIN
+	constexpr auto sensitivity = Qt::CaseInsensitive;
+#else
+	constexpr auto sensitivity = Qt::CaseSensitive;
+#endif
+	bool preset = false;
+	for (const auto &location : locations_)
+		if (normalized.compare(QDir::cleanPath(QDir::fromNativeSeparators(location.second)), sensitivity) == 0)
+			preset = true;
+	QStringList watches;
+	if (preset && QFileInfo(folder).isAbsolute()) {
+		if (!QFileInfo(folder).isDir() && !QDir().mkpath(folder)) {
+			recoveryError_ = tr("Could not recreate active preset folder: %1. Check drive availability and permissions.").arg(folder);
+			notice_ = recoveryError_;
+		} else {
+			if (notice_ == recoveryError_) notice_.clear();
+			recoveryError_.clear();
+			watches.append(folder);
+		}
+		// Watch the nearest existing parent too, so deletions and replacements are noticed.
+		QString parent = QFileInfo(folder).absolutePath();
+		while (!QFileInfo(parent).isDir()) {
+			const QString next = QFileInfo(parent).absolutePath();
+			if (next == parent) break;
+			parent = next;
+		}
+		if (QFileInfo(parent).isDir()) watches.append(parent);
+	}
+	watches.removeDuplicates();
+	const auto current = folderWatcher_->directories();
+	for (const auto &path : current)
+		if (!watches.contains(path)) folderWatcher_->removePath(path);
+	for (const auto &path : watches)
+		if (!current.contains(path)) folderWatcher_->addPath(path);
 }
 
 bool FolderDock::applyFolder(const QString &folder, QString &error)
@@ -228,11 +268,19 @@ bool FolderDock::applyFolder(const QString &folder, QString &error)
 	return true;
 }
 
-void FolderDock::chooseFolder(const QString &folder)
+void FolderDock::chooseFolder(const QString &folder, bool createMissing)
 {
 	if (!unavailableReason(automatic_->isChecked()).isEmpty() || picker_ || waitingForStop_)
 		return;
 	notice_.clear();
+	if (createMissing && QFileInfo(folder).isAbsolute() && !QFileInfo(folder).isDir()) {
+		if (!QDir().mkpath(folder)) {
+			notice_ = tr("Could not recreate preset folder: %1. Check the path, drive availability, and permissions.")
+				.arg(QDir::toNativeSeparators(folder));
+			refresh();
+			return;
+		}
+	}
 	if (!folder.isEmpty() && (!QFileInfo(folder).isAbsolute() || !QFileInfo(folder).isDir())) {
 		notice_ = tr("That folder is unavailable. Edit the preset or choose an existing folder.");
 		refresh();

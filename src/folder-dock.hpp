@@ -12,6 +12,7 @@ class QMenu;
 class QDialog;
 
 class QFileDialog;
+class QFileSystemWatcher;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -26,7 +27,7 @@ public:
 
 private:
 	static void onEvent(obs_frontend_event event, void *data);
-	void chooseFolder(const QString &folder = {});
+	void chooseFolder(const QString &folder = {}, bool createMissing = false);
 	void selectDestination();
 	void finishSelection(const QString &folder);
 	void editPresets();
@@ -35,10 +36,13 @@ private:
 	void updateLocations();
 	void updatePresetMenu();
 	void rememberFolder(const QString &folder);
+	void maintainPresetFolder(const QString &folder);
 	void openPicker();
 	void continueFolderChange();
 	QString unavailableReason(bool ignoreOutputs = false) const;
 	QLineEdit *path_;
+	QFileSystemWatcher *folderWatcher_;
+	QString recoveryError_;
 	QLabel *folderAccess_;
 	QPushButton *choose_;
 	QPushButton *open_;
