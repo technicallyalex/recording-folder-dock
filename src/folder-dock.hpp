@@ -41,6 +41,7 @@ private:
 	void openPicker();
 	void continueFolderChange();
 	void continueReplayRestart();
+	void beginReplayRestart(bool defer = false);
 	QString unavailableReason(bool ignoreOutputs = false) const;
 	QLineEdit *path_;
 	QFileSystemWatcher *folderWatcher_;

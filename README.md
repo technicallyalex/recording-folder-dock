@@ -34,7 +34,7 @@ For portable Windows OBS, copy the DLL into its `obs-plugins\64bit` folder. To u
 
 Folder changes apply to the current profile's recording output, including subsequent replay sessions. Presets, recents, and the automatic toggle are shared across profiles. Existing recordings stay where they are.
 
-With automatic mode off, stop recording and replay before changing folders. With it on, recording stays stopped after a change; only replay restarts. **Canceling leaves outputs stopped, and stopping replay discards unsaved replay footage.** Enable Replay Buffer in OBS Output Settings to use automatic restart.
+With automatic mode off, stop recording and replay before changing folders. With it on, recording stays stopped after a change; only replay restarts. Canceling resumes replay on the unchanged folder; recording stays stopped. **Stopping replay discards unsaved replay footage.** Enable Replay Buffer in OBS Output Settings to use automatic restart.
 
 The dock supports Simple, Advanced Standard, and Custom FFmpeg with **Output to File** enabled. Folder selection checks actual write access; the availability icon is a lightweight filesystem check.
 

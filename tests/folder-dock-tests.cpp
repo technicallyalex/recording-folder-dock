@@ -171,7 +171,11 @@ int main(int argc, char **argv)
 		check(stopRecordingCalls == 1 && stopReplayCalls == 1, "idle outputs are not stopped");
 		picker->reject();
 		QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-		check(startReplayCalls == 1, "cancel does not start replay");
+		QApplication::processEvents();
+		check(startReplayCalls == 2, "cancel restarts replay in automatic mode");
+		check(get("SimpleOutput", "FilePath") == QDir::toNativeSeparators(temp.path()), "cancel preserves recording folder");
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED);
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED);
 		dock.refresh();
 		replay = true;
 		choose->click();
@@ -181,7 +185,7 @@ int main(int argc, char **argv)
 		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED);
 		QApplication::processEvents();
 		check(!dock.findChild<QFileDialog *>(), "profile change cancels pending picker");
-		check(startReplayCalls == 1, "profile change does not restart replay");
+		check(startReplayCalls == 2, "profile change does not restart replay");
 		automatic->setChecked(false);
 		event(OBS_FRONTEND_EVENT_PROFILE_CHANGING);
 		check(!dock.applyFolder(temp.path(), error), "profile transition blocks changes");
@@ -378,6 +382,46 @@ int main(int argc, char **argv)
 		check(startReplayCalls == beforeFailure + 3, "failed replay restart attempts are bounded");
 		check(dock.findChild<QPushButton *>("presets")->isEnabled(), "restart timeout unlocks dock controls");
 		check(dock.toolTip().contains("did not restart"), "restart failure is reported");
+	}
+	{
+		FolderDock dock(nullptr, preferences);
+		auto *automatic = dock.findChild<QPushButton *>("automaticFolderChange");
+		auto *choose = dock.findChild<QPushButton *>("chooseFolder");
+		automatic->setChecked(true);
+		const QString original = get("SimpleOutput", "FilePath");
+		const int before = startReplayCalls;
+		const int recordStops = stopRecordingCalls;
+		replay = true;
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED);
+		choose->click();
+		replay = false;
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED);
+		QApplication::processEvents();
+		auto *picker = dock.findChild<QFileDialog *>();
+		check(picker != nullptr, "cancel test opens picker after stopping replay");
+		picker->close();
+		QApplication::processEvents();
+		QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+		check(startReplayCalls == before + 1, "closing folder dialog resumes stopped replay");
+		check(get("SimpleOutput", "FilePath") == original, "closing dialog preserves original destination");
+		check(stopRecordingCalls == recordStops, "cancel recovery does not affect recording");
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED);
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED);
+		automatic->setChecked(false);
+		choose->click();
+		picker = dock.findChild<QFileDialog *>();
+		check(picker != nullptr, "manual cancel opens picker");
+		picker->reject();
+		QApplication::processEvents();
+		QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+		check(startReplayCalls == before + 1, "manual-mode cancel does not start replay");
+		automatic->setChecked(true);
+		choose->click();
+		event(OBS_FRONTEND_EVENT_PROFILE_CHANGING);
+		event(OBS_FRONTEND_EVENT_PROFILE_CHANGED);
+		QApplication::processEvents();
+		QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+		check(startReplayCalls == before + 1, "profile-triggered dialog rejection does not resume replay");
 	}
 	config_close(profile);
 	std::printf("PASS: %d checks\n", checks);
