@@ -6,11 +6,19 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 jobs:
+  release-tools:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Test release preparation
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
+
   build:
     runs-on: windows-2022
     timeout-minutes: 30

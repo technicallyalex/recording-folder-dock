@@ -81,7 +81,7 @@ int main(int argc, char **argv)
 	const QString expected = QDir::toNativeSeparators(folder);
 	QString error;
 	{
-		FolderDock dock;
+		FolderDock dock(nullptr, {}, {}, true);
 		config_set_string(profile, "AdvOut", "RecFilePath", "unchanged advanced");
 		check(dock.applyFolder(folder, error), "simple path saved");
 		check(get("SimpleOutput", "FilePath") == expected, "Unicode path preserved");
@@ -223,7 +223,7 @@ int main(int argc, char **argv)
 	      "open preference test profile");
 	const QString preferences = temp.filePath("dock-settings.ini");
 	{
-		FolderDock dock(nullptr, preferences);
+		FolderDock dock(nullptr, preferences, {}, true);
 		dock.findChild<QPushButton *>("automaticFolderChange")->setChecked(true);
 		dock.findChild<QPushButton *>("editPresets")->click();
 		auto *editor = dock.findChild<QDialog *>("presetEditor");
@@ -258,7 +258,7 @@ int main(int argc, char **argv)
 	}
 	{
 		const int startsBefore = startReplayCalls;
-		FolderDock dock(nullptr, preferences);
+		FolderDock dock(nullptr, preferences, {}, true);
 		check(dock.findChild<QPushButton *>("automaticFolderChange")->isChecked(), "automatic toggle survives restart");
 		check(startReplayCalls == startsBefore, "loading enabled toggle does not start replay");
 		check(QSettings(preferences, QSettings::IniFormat).value("presets/1/name").toString() == "Game capture", "presets survive restart");
@@ -326,19 +326,22 @@ int main(int argc, char **argv)
 		recent->actions().last()->trigger();
 	}
 	{
-		FolderDock dock(nullptr, preferences);
+		FolderDock dock(nullptr, preferences, {}, true);
 		check(!dock.findChild<QPushButton *>("automaticFolderChange")->isChecked(), "disabled toggle survives restart");
 		check(QSettings(preferences, QSettings::IniFormat).value("recentPaths").toStringList().value(0).isEmpty(), "history clearing persists");
 	}
 	{
-		FolderDock dock(nullptr, preferences);
+		qint64 testTime = 0;
+		FolderDock dock(nullptr, preferences, [&] { return testTime; }, true);
 		dock.findChild<QPushButton *>("automaticFolderChange")->setChecked(true);
 		auto *presets = dock.findChild<QPushButton *>("presets")->menu();
 		QMetaObject::invokeMethod(presets, "aboutToShow");
-		auto wait = [](int milliseconds) {
-			QEventLoop loop;
-			QTimer::singleShot(milliseconds, &loop, &QEventLoop::quit);
-			loop.exec();
+		auto wait = [&](int milliseconds) {
+			for (int elapsed = 0; elapsed < milliseconds; elapsed += 100) {
+				testTime += qMin(100, milliseconds - elapsed);
+				QMetaObject::invokeMethod(dock.findChild<QTimer *>("operationPoll"), "timeout");
+				QApplication::processEvents();
+			}
 		};
 		const int before = startReplayCalls;
 		replay = true;
@@ -382,9 +385,14 @@ int main(int argc, char **argv)
 		check(startReplayCalls == beforeFailure + 3, "failed replay restart attempts are bounded");
 		check(dock.findChild<QPushButton *>("presets")->isEnabled(), "restart timeout unlocks dock controls");
 		check(dock.toolTip().contains("did not restart"), "restart failure is reported");
+		presets->actions().first()->trigger();
+		event(OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTING);
+		wait(10500);
+		dock.findChild<QPushButton *>("automaticFolderChange")->setChecked(false);
+		check(dock.applyFolder(temp.path(), error), "failed STARTING without STOPPED does not leave dock blocked");
 	}
 	{
-		FolderDock dock(nullptr, preferences);
+		FolderDock dock(nullptr, preferences, {}, true);
 		auto *automatic = dock.findChild<QPushButton *>("automaticFolderChange");
 		auto *choose = dock.findChild<QPushButton *>("chooseFolder");
 		automatic->setChecked(true);
@@ -422,6 +430,58 @@ int main(int argc, char **argv)
 		QApplication::processEvents();
 		QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 		check(startReplayCalls == before + 1, "profile-triggered dialog rejection does not resume replay");
+	}
+	{
+		FolderDock dock(nullptr, preferences, {}, true);
+		dock.findChild<QPushButton *>("editPresets")->click();
+		auto *editor = dock.findChild<QDialog *>("presetEditor");
+		auto *table = editor->findChild<QTableWidget *>("presetTable");
+		const QString original = table->item(0, 0)->text();
+		table->item(0, 0)->setText("Unsaved edit");
+		const QString backup = preferences + ".backup";
+		check(QFile::rename(preferences, backup) && QDir().mkdir(preferences), "block settings destination");
+		editor->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Save)->click();
+		check(editor->isVisible(), "failed preferences save keeps editor open");
+		editor->reject();
+		QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+		auto *menu = dock.findChild<QPushButton *>("presets")->menu();
+		QMetaObject::invokeMethod(menu, "aboutToShow");
+		check(menu->actions().first()->text() == original, "failed save does not change live presets");
+		check(QDir().rmdir(preferences) && QFile::rename(backup, preferences), "restore settings destination");
+		auto *automatic = dock.findChild<QPushButton *>("automaticFolderChange");
+		automatic->setChecked(!automatic->isChecked());
+		check(QSettings(preferences, QSettings::IniFormat).value("presets/1/name").toString() == original,
+		      "later save does not leak canceled preset edits");
+	}
+	{
+		const QString guarded = temp.filePath("guarded/preset");
+		const auto volume = folderVolume(temp.path());
+		check(volume.known(), "resolve temporary folder backing volume");
+		auto wrongVolume = volume;
+		wrongVolume.device += "-different-volume";
+		const auto blocked = checkFolder(guarded, true, wrongVolume);
+		check(!blocked.error.isEmpty() && !QFileInfo(guarded).exists(), "volume mismatch never creates fallback directories");
+		const auto unbound = checkFolder(guarded, true, {});
+		check(!unbound.error.isEmpty() && !QFileInfo(guarded).exists(), "unbound missing legacy preset is not recreated blindly");
+		const auto recovered = checkFolder(guarded, true, volume);
+		check(recovered.recovered && QFileInfo(guarded).isDir(), "matching backing volume allows recovery");
+		const QString canceledPath = temp.filePath("canceled/preset");
+		const auto cancel = std::make_shared<std::atomic_bool>(true);
+		check(checkFolder(canceledPath, true, volume, cancel).canceled && !QFileInfo(canceledPath).exists(),
+		      "obsolete background check does not create directories");
+	}
+	{
+		config_set_string(profile, "SimpleOutput", "FilePath", temp.path().toUtf8().constData());
+		FolderDock dock;
+		QEventLoop loop;
+		QTimer poll;
+		QObject::connect(&poll, &QTimer::timeout, &loop, [&] {
+			if (dock.findChild<QLabel *>("folderAccess")->property("available").toBool()) loop.quit();
+		});
+		poll.start(10);
+		QTimer::singleShot(3000, &loop, &QEventLoop::quit);
+		loop.exec();
+		check(dock.findChild<QLabel *>("folderAccess")->property("available").toBool(), "background health check updates dock asynchronously");
 	}
 	config_close(profile);
 	std::printf("PASS: %d checks\n", checks);

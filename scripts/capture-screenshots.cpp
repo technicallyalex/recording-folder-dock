@@ -83,7 +83,7 @@ int main(int argc, char **argv)
   }
   bool ok = true;
   {
-    FolderDock dock(nullptr, settingsFile);
+    FolderDock dock(nullptr, settingsFile, {}, true);
     dock.resize(520, 255);
     dock.show();
     QApplication::processEvents();
