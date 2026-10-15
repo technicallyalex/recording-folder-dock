@@ -95,7 +95,7 @@ FolderDock::FolderDock(QWidget *parent, const QString &settingsFile) : QWidget(p
 	automatic_ = new QPushButton(tr("Auto-stop / restart replay"), this);
 	automatic_->setObjectName("automaticFolderChange");
 	automatic_->setCheckable(true);
-	automatic_->setToolTip(tr("Choose folder stops recording and replay. After a folder is saved, replay starts again. Unsaved replay footage is discarded. Cancel leaves outputs stopped."));
+	automatic_->setToolTip(tr("Choose folder stops recording and replay. Selecting a folder or canceling restarts replay. Recording stays stopped. Unsaved replay footage is discarded."));
 	layout->addWidget(automatic_);
 	connect(automatic_, &QPushButton::toggled, this, [this] { notice_.clear(); saveLocations(); refresh(); });
 	stopTimeout_ = new QTimer(this);
@@ -353,17 +353,29 @@ void FolderDock::finishSelection(const QString &folder)
 	if (!applyFolder(folder, error)) {
 		notice_ = error;
 	} else if (automaticChange_) {
-		restartPending_ = true;
-		restartAttempts_ = 0;
-		restartRevision_ = profileRevision_;
-		restartFolder_ = path_->text();
-		restartKey_ = QString::fromUtf8(destination(obs_frontend_get_profile_config()).key);
-		restartElapsed_.start();
-		changePoll_->start();
-		continueReplayRestart();
+		beginReplayRestart();
 	}
 	automaticChange_ = false;
 	refresh();
+}
+
+void FolderDock::beginReplayRestart(bool defer)
+{
+	auto *config = obs_frontend_get_profile_config();
+	if (!config || shuttingDown_ || profileChanging_) return;
+	const auto target = destination(config);
+	if (!target.local) return;
+	restartPending_ = true;
+	restartAttempts_ = 0;
+	restartRevision_ = profileRevision_;
+	restartFolder_ = value(config, target.section, target.key);
+	restartKey_ = QString::fromUtf8(target.key);
+	restartElapsed_.start();
+	changePoll_->start();
+	if (defer)
+		QTimer::singleShot(0, this, &FolderDock::continueReplayRestart);
+	else
+		continueReplayRestart();
 }
 
 void FolderDock::continueReplayRestart()
@@ -383,7 +395,7 @@ void FolderDock::continueReplayRestart()
 	}
 	if (restartElapsed_.elapsed() >= 10000) {
 		restartPending_ = false;
-		notice_ = tr("The folder was saved, but replay did not restart. Check OBS replay settings and any output error.");
+		notice_ = tr("Replay did not restart. Check OBS replay settings and any output error.");
 		return;
 	}
 	// STARTING means OBS accepted the request. Do not duplicate an in-flight start.
@@ -426,9 +438,17 @@ void FolderDock::openPicker()
 		if (!selected.isEmpty())
 			finishSelection(selected.first());
 	});
-	connect(dialog, &QFileDialog::rejected, this, [this] {
-		if (automaticChange_)
-			notice_ = tr("Folder selection canceled. Recording and replay remain stopped.");
+	connect(dialog, &QFileDialog::rejected, this, [this, revision, target, original] {
+		const bool resume = automaticChange_;
+		automaticChange_ = false;
+		auto *config = obs_frontend_get_profile_config();
+		if (!resume || shuttingDown_ || profileChanging_ || revision != profileRevision_ || !config) return;
+		const auto current = destination(config);
+		if (QString::fromUtf8(current.key) != QString::fromUtf8(target.key) ||
+		    value(config, current.section, current.key) != original) return;
+		// Let the native dialog finish closing before requesting output startup.
+		beginReplayRestart(true);
+		refresh();
 	});
 	connect(dialog, &QObject::destroyed, this, [this] { refresh(); });
 	dialog->open();
