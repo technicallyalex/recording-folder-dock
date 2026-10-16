@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check tag matches version
+        run: |
+          python3 - <<'PY'
+          import json, os
+          version = json.load(open('buildspec.json'))['version']
+          assert os.environ['GITHUB_REF_NAME'] == 'v' + version, 'Tag must match buildspec.json'
+          PY
+
+  packages:
+    needs: validate
+    uses: ./.github/workflows/build.yml
+
+  publish:
+    needs: packages
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          path: packages
+      - name: Validate packages and write checksums
+        run: python3 scripts/prepare-release.py packages release
+      - name: Publish separate platform downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo 'Release already exists; refusing to replace assets.' >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" release/* --verify-tag --draft \
+            --title "Recording Folder Dock $RELEASE_TAG" --generate-notes
+          gh release edit "$RELEASE_TAG" --draft=false --latest

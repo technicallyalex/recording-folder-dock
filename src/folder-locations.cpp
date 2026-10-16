@@ -14,6 +14,9 @@
 #include <QSignalBlocker>
 #include <QTableWidget>
 #include <QVBoxLayout>
+#include <QSaveFile>
+#include <QTemporaryDir>
+#include <obs.h>
 
 void FolderDock::loadLocations()
 {
@@ -31,6 +34,9 @@ void FolderDock::loadLocations()
 			const auto path = settings_->value("path").toString();
 			if (!name.isEmpty() && !path.isEmpty())
 				locations_.append({name, path});
+			const FolderVolume volume{QByteArray::fromBase64(settings_->value("device").toByteArray()),
+				settings_->value("volumeRoot").toString()};
+			if (volume.known()) volumes_.insert(normalizedFolder(path), volume);
 		}
 		settings_->endArray();
 		if (settings_->status() != QSettings::NoError)
@@ -38,22 +44,42 @@ void FolderDock::loadLocations()
 	}
 }
 
-bool FolderDock::saveLocations()
+bool FolderDock::saveLocations(const QList<QPair<QString, QString>> *candidate,
+	const QHash<QString, FolderVolume> *bindings)
 {
 	if (!settings_)
 		return true;
-	settings_->setValue("autoStop", automatic_->isChecked());
-	settings_->setValue("recentPaths", recentPaths_);
-	settings_->beginWriteArray("presets", static_cast<int>(locations_.size()));
-	for (int index = 0; index < locations_.size(); ++index) {
-		settings_->setArrayIndex(index);
-		settings_->setValue("name", locations_[index].first);
-		settings_->setValue("path", locations_[index].second);
+	const auto &entries = candidate ? *candidate : locations_;
+	const auto &volumes = bindings ? *bindings : volumes_;
+	QTemporaryDir staging;
+	bool saved = staging.isValid();
+	if (saved) {
+		const QString stagedFile = staging.filePath("settings.ini");
+		QSettings settings(stagedFile, QSettings::IniFormat);
+		settings.setValue("autoStop", automatic_->isChecked());
+		settings.setValue("recentPaths", recentPaths_);
+		settings.beginWriteArray("presets", static_cast<int>(entries.size()));
+		for (int index = 0; index < entries.size(); ++index) {
+			settings.setArrayIndex(index);
+			settings.setValue("name", entries[index].first);
+			settings.setValue("path", entries[index].second);
+			const auto volume = volumes.value(normalizedFolder(entries[index].second));
+			settings.setValue("device", volume.device.toBase64());
+			settings.setValue("volumeRoot", volume.root);
+		}
+		settings.endArray();
+		settings.sync();
+		QFile input(stagedFile);
+		QSaveFile output(settings_->fileName());
+		saved = settings.status() == QSettings::NoError && input.open(QIODevice::ReadOnly) && output.open(QIODevice::WriteOnly);
+		if (saved) {
+			const QByteArray bytes = input.readAll();
+			saved = output.write(bytes) == bytes.size() && output.commit();
+		}
 	}
-	settings_->endArray();
-	settings_->sync();
-	if (settings_->status() != QSettings::NoError) {
+	if (!saved) {
 		notice_ = tr("Could not save dock preferences. Changes may be lost when OBS closes.");
+		blog(LOG_WARNING, "[recording-folder-dock] Failed to save preferences atomically");
 		return false;
 	}
 	return true;
@@ -114,7 +140,7 @@ void FolderDock::rememberFolder(const QString &folder)
 
 void FolderDock::editPresets()
 {
-	if (editor_ || picker_ || waitingForStop_)
+	if (editor_ || picker_ || operation_ != Operation::Idle)
 		return;
 	auto *dialog = new QDialog(this);
 	editor_ = dialog;
@@ -220,13 +246,21 @@ void FolderDock::editPresets()
 				return;
 			}
 		}
-		locations_ = entries;
-		const bool saved = saveLocations();
+		auto bindings = volumes_;
+		for (const auto &entry : entries) {
+			const auto key = normalizedFolder(entry.second);
+			if (!bindings.value(key).known() && QFileInfo(entry.second).isDir())
+				bindings.insert(key, folderVolume(entry.second));
+		}
+		const bool saved = saveLocations(&entries, &bindings);
 
 		if (!saved) {
 			error->setText(notice_);
 			return;
 		}
+		locations_ = entries;
+		volumes_ = bindings;
+		invalidateFolderHealth();
 		const QString selected = apply && table->currentRow() >= 0 ? entries[table->currentRow()].second : QString();
 		const auto revision = profileRevision_;
 		dialog->accept();

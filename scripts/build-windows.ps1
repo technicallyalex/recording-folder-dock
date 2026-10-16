@@ -18,7 +18,8 @@ Remove-Item Env:Path -ErrorAction SilentlyContinue
 $env:Path = $buildSearchPath
 Push-Location $projectRoot
 try {
-    $version = (Get-Content buildspec.json -Raw | ConvertFrom-Json).version
+    $spec = Get-Content buildspec.json -Raw | ConvertFrom-Json
+    $version = $spec.version
     $buildDir = "build_x64_v$version"
     $package = Join-Path $projectRoot "dist\recording-folder-dock-$version-windows-x64"
     if (Test-Path -LiteralPath "$package.zip") { throw "Package already exists: $package.zip. Bump the version to create a new release." }
@@ -29,9 +30,9 @@ try {
     & $cmake --build $buildDir --config RelWithDebInfo
     if ($LASTEXITCODE) { throw 'Build failed.' }
     if ($Test -or $Screenshots) {
-        $obsBin = Join-Path $projectRoot '.deps\obs-studio-31.1.1\build_x64\rundir\Release\bin\64bit'
-        $qtRoot = Join-Path $projectRoot '.deps\obs-deps-qt6-2025-07-11-x64'
-        $depsBin = Join-Path $projectRoot '.deps\obs-deps-2025-07-11-x64\bin'
+        $obsBin = Join-Path $projectRoot ".deps\obs-studio-$($spec.dependencies.'obs-studio'.version)\build_x64\rundir\Release\bin\64bit"
+        $qtRoot = Join-Path $projectRoot ".deps\obs-deps-qt6-$($spec.dependencies.qt6.version)-x64"
+        $depsBin = Join-Path $projectRoot ".deps\obs-deps-$($spec.dependencies.prebuilt.version)-x64\bin"
         $env:Path = "$obsBin;$qtRoot\bin;$depsBin;$env:Path"
         $previousQtPlugins = $env:QT_PLUGIN_PATH
         $env:QT_PLUGIN_PATH = Join-Path $qtRoot 'plugins'
