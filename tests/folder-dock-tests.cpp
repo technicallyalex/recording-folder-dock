@@ -283,8 +283,14 @@ int main(int argc, char **argv)
 		check(!dock.findChild<QFileDialog *>(), "preset bypasses picker");
 		check(QDir().rmdir(folder), "delete current preset between recordings");
 		QEventLoop recoveryWait;
-		QTimer::singleShot(250, &recoveryWait, &QEventLoop::quit);
+		QTimer recoveryPoll;
+		QObject::connect(&recoveryPoll, &QTimer::timeout, &recoveryWait, [&] {
+			if (QFileInfo(folder).isDir()) recoveryWait.quit();
+		});
+		recoveryPoll.start(10);
+		QTimer::singleShot(2000, &recoveryWait, &QEventLoop::quit);
 		recoveryWait.exec();
+		recoveryPoll.stop();
 		check(QFileInfo(folder).isDir(), "watcher restores active preset without selecting it");
 		check(startReplayCalls == startsBefore + 1, "folder recovery does not start outputs");
 		check(QDir().rmdir(folder), "delete active preset during replay use");
@@ -482,6 +488,36 @@ int main(int argc, char **argv)
 		QTimer::singleShot(3000, &loop, &QEventLoop::quit);
 		loop.exec();
 		check(dock.findChild<QLabel *>("folderAccess")->property("available").toBool(), "background health check updates dock asynchronously");
+	}
+	{
+		const QString path = temp.filePath("async-rebind");
+		check(QDir().mkpath(path), "create async rebind destination");
+		const QString settingsPath = temp.filePath("async-rebind.ini");
+		{
+			QSettings settings(settingsPath, QSettings::IniFormat);
+			settings.beginWriteArray("presets", 1);
+			settings.setArrayIndex(0);
+			settings.setValue("name", "Async rebind");
+			settings.setValue("path", path);
+			settings.setValue("device", QByteArray("wrong-drive").toBase64());
+			settings.setValue("volumeRoot", folderVolume(path).root);
+			settings.endArray();
+			settings.sync();
+		}
+		config_set_string(profile, "SimpleOutput", "FilePath", path.toUtf8().constData());
+		FolderDock dock(nullptr, settingsPath);
+		check(dock.applyFolder(path, error), "explicit selection rebinds current preset drive");
+		QEventLoop loop;
+		QTimer poll;
+		QObject::connect(&poll, &QTimer::timeout, &loop, [&] {
+			if (dock.findChild<QLabel *>("folderAccess")->property("available").toBool()) loop.quit();
+		});
+		poll.start(10);
+		QTimer::singleShot(1000, &loop, &QEventLoop::quit);
+		loop.exec();
+		check(dock.findChild<QLabel *>("folderAccess")->property("available").toBool(),
+		      "old background result cannot override updated preset drive binding");
+		check(!dock.toolTip().contains("original drive is unavailable"), "obsolete drive warning is discarded");
 	}
 	config_close(profile);
 	std::printf("PASS: %d checks\n", checks);

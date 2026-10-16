@@ -212,6 +212,12 @@ qint64 FolderDock::now() const
 	return clock_ ? clock_() : lifetime_.elapsed();
 }
 
+void FolderDock::invalidateFolderHealth()
+{
+	if (healthCancel_) healthCancel_->store(true);
+	nextHealthCheck_ = 0;
+}
+
 void FolderDock::maintainPresetFolder(const QString &folder)
 {
 	if (healthPending_) {
@@ -235,9 +241,10 @@ void FolderDock::maintainPresetFolder(const QString &folder)
 		// The destructor drains this private pool before QObject or the module can disappear.
 		healthPool_.start([this, folder, preset, expected, revision, cancel] {
 			const auto result = checkFolder(folder, preset, expected, cancel);
-			QMetaObject::invokeMethod(this, [this, result, revision] {
+			QMetaObject::invokeMethod(this, [this, result, revision, cancel] {
 				healthPending_ = false;
-				acceptFolderHealth(result, revision);
+				if (cancel->load()) nextHealthCheck_ = 0;
+				else acceptFolderHealth(result, revision);
 				refresh();
 			}, Qt::QueuedConnection);
 		});
@@ -319,7 +326,7 @@ bool FolderDock::applyFolder(const QString &folder, QString &error)
 		if (normalizedFolder(location.second) == normalizedFolder(normalized))
 			volumes_.insert(normalizedFolder(normalized), folderVolume(normalized));
 	rememberFolder(normalized);
-	nextHealthCheck_ = 0;
+	invalidateFolderHealth();
 	refresh();
 	return true;
 }

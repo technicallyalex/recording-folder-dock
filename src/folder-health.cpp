@@ -73,8 +73,10 @@ FolderHealth checkFolder(const QString &path, bool recover, const FolderVolume &
 	result.parent = QFileInfo(path).absolutePath();
 	const QStorageInfo storage(path);
 	const auto type = storage.fileSystemType().toLower();
-	result.localWatch = type != "cifs" && type != "smbfs" && type != "nfs" && type != "nfs4" &&
-		!QDir::fromNativeSeparators(path).startsWith("//");
+	// Unknown and remote filesystems stay on the worker; only known local types get UI-thread watches.
+	static const QList<QByteArray> localTypes{"ntfs", "refs", "fat", "fat32", "vfat", "exfat", "ext2", "ext3",
+		"ext4", "btrfs", "xfs", "zfs", "tmpfs", "overlay", "ufs"};
+	result.localWatch = localTypes.contains(type) && !QDir::fromNativeSeparators(path).startsWith("//");
 #ifdef Q_OS_WIN
 	const QString root = QDir::toNativeSeparators(storage.rootPath());
 	if (GetDriveTypeW(reinterpret_cast<LPCWSTR>(root.utf16())) == DRIVE_REMOTE) result.localWatch = false;

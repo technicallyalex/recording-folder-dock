@@ -44,6 +44,7 @@ private:
 	void updatePresetMenu();
 	void rememberFolder(const QString &folder);
 	void maintainPresetFolder(const QString &folder);
+	void invalidateFolderHealth();
 	void acceptFolderHealth(const FolderHealth &health, unsigned long long revision);
 	qint64 now() const;
 	enum class Operation { Idle, Stopping, Choosing, Restarting };

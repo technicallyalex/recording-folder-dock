@@ -260,7 +260,7 @@ void FolderDock::editPresets()
 		}
 		locations_ = entries;
 		volumes_ = bindings;
-		nextHealthCheck_ = 0;
+		invalidateFolderHealth();
 		const QString selected = apply && table->currentRow() >= 0 ? entries[table->currentRow()].second : QString();
 		const auto revision = profileRevision_;
 		dialog->accept();
