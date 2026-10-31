@@ -7,6 +7,8 @@ package="dist/recording-folder-dock-${version}-flatpak-${arch}.flatpak"
 [[ ! -e "$package" ]] || { echo "Package already exists: $package" >&2; exit 1; }
 flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 flatpak install --user --noninteractive --include-sdk flathub com.obsproject.Studio
+obs_version=$(flatpak run --command=obs com.obsproject.Studio --version)
+[[ $obs_version =~ ([0-9]+)\. ]] && (( BASH_REMATCH[1] >= 33 )) || { echo 'OBS Flatpak 33 or newer is required.' >&2; exit 1; }
 mkdir -p dist
 flatpak info --user --show-metadata com.obsproject.Studio > dist/obs-flatpak-metadata.ini
 source_dir="$PWD/build_flatpak_source_v$version"
@@ -15,6 +17,8 @@ git archive HEAD | tar -x -C "$source_dir"
 python3 scripts/flatpak-manifest.py "$source_dir" dist/obs-flatpak-metadata.ini dist/flatpak-manifest.json
 flatpak-builder --user --install-deps-from=flathub --repo="build_flatpak_repo_v$version" \
     "build_flatpak_v$version" dist/flatpak-manifest.json
+test -f "build_flatpak_v$version/files/lib/obs-modules/plugins/recording-folder-dock.so"
+test -f "build_flatpak_v$version/files/share/obs-modules/plugins/recording-folder-dock/locale/en-US.ini"
 flatpak build-bundle --runtime "build_flatpak_repo_v$version" "$package" \
     com.obsproject.Studio.Plugin.RecordingFolderDock stable
 echo "Package ready: $package"

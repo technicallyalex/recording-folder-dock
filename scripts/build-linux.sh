@@ -11,7 +11,7 @@ cmake -S . -B "$build_dir" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TE
 cmake --build "$build_dir" --parallel 2
 ctest --test-dir "$build_dir" --output-on-failure
 plugin="$build_dir/recording-folder-dock.so"
-install -Dm755 "$plugin" "$package/recording-folder-dock/bin/64bit/recording-folder-dock.so"
+install -Dm755 "$plugin" "$package/recording-folder-dock/recording-folder-dock.so"
 cp -R data "$package/recording-folder-dock/data"
 cp scripts/install-linux.sh LICENSE "$package/"
 cat > "$package/INSTALL.txt" <<'EOF'
@@ -20,6 +20,9 @@ Recording Folder Dock for native Linux
 1. Close OBS and extract this archive.
 2. Run: bash install-linux.sh
 3. Start OBS and enable Docks > Recording Folder.
+
+Requires OBS 33 or newer. Installs to $XDG_DATA_HOME/obs-studio/plugins
+(default: ~/.local/share/obs-studio/plugins).
 
 This binary targets Ubuntu 24.04 x86-64 with the OBS Project PPA.
 Other native distributions should build from source or use OBS Flatpak.

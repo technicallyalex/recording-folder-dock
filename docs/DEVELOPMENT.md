@@ -2,6 +2,8 @@
 
 Builds require CMake 3.28+, a C++17 compiler, OBS frontend development files, and Qt 6 Widgets. The Windows script downloads pinned OBS and Qt dependencies automatically.
 
+Release packages target the OBS 33 plugin loader. Windows keeps its older pinned SDK, and native Linux uses the OBS PPA's available development files; no new frontend API is required. The installation layout sets the minimum supported OBS version. OBS 31.1–32 users should keep v1.4.0.
+
 ## Windows
 
 Install Visual Studio 2022 Build Tools with **Desktop development with C++**, a Windows SDK, and CMake tools.
@@ -54,5 +56,9 @@ Run `scripts/build-windows.ps1 -Test -Screenshots` to capture the real plugin wi
 Bump `buildspec.json` and merge the change, then push the matching tag (for example `v1.4.0`). The Release workflow validates the version, runs platform builds and release-tool tests, and publishes the three separate packages with SHA-256 checksums. Existing release assets are never replaced. If publication fails, a draft may remain for inspection.
 
 Run `python -m unittest discover -s tests -p 'test_*.py'` to test release staging locally.
+
+The packaged Windows installer test also covers migration backups, portable installs, repeat installs, and version guards in isolated folders. Linux installer fixtures run on Linux with temporary XDG paths and mocked OBS/dependency commands. Flatpak builds check the installed module and locale paths before bundling.
+
+OBS 33 paths were checked against the [migration guide](https://obsproject.com/kb/legacy-plugin-developer-info) and the [platform loader implementations](https://github.com/obsproject/obs-studio/tree/33.0.0/frontend/plugin-manager). Native system installs use `lib/obs-modules/plugins` and `share/obs/obs-modules/plugins`; Flatpak extensions use `lib/obs-modules/plugins` and `share/obs-modules/plugins`. Native per-user installs use `$XDG_DATA_HOME/obs-studio/plugins/<name>/<name>.so` with adjacent `data`. Do not use the old general Plugins Guide's folder structure for these packages.
 
 Based on the [OBS plugin template](https://github.com/obsproject/obs-plugintemplate). Licensed under [GPL-2.0-or-later](../LICENSE).

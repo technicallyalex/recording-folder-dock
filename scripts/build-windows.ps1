@@ -57,12 +57,19 @@ try {
 Recording Folder Dock for Windows x64
 
 1. Close OBS and extract this ZIP.
-2. Copy recording-folder-dock into C:\ProgramData\obs-studio\plugins\.
-   Alternatively, run install-windows.ps1 in an Administrator PowerShell.
+2. Run install-windows.ps1 in an Administrator PowerShell.
+   For a custom OBS installation, pass -ObsPath "D:\OBS".
+   For portable OBS, pass -Portable -ObsPath "D:\OBS".
 3. Start OBS and enable Docks > Recording Folder.
 
-Requires 64-bit OBS 31.1 or newer. For portable OBS, copy the DLL into
-its obs-plugins\64bit folder instead. Install in only one location.
+Requires 64-bit OBS 33 or newer. The DLL belongs directly inside
+recording-folder-dock, next to data (not bin\64bit). The installer backs up
+previous files and removes this plugin's legacy copies.
+
+Manual install: copy recording-folder-dock into C:\ProgramData\obs-studio\plugins\.
+Portable: copy it into <OBS root>\plugins\ instead. Remove old copies of
+this plugin from bin\64bit or obs-plugins\64bit after backing them up.
+Use plugin v1.4.0 with OBS 31.1-32.
 
 Help: https://github.com/technicallyalex/recording-folder-dock
 '@ | Set-Content -LiteralPath (Join-Path $package 'INSTALL.txt')
