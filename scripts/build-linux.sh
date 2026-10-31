@@ -2,7 +2,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [[ $(uname -s) == Linux ]] || { echo 'Run this script on Linux.' >&2; exit 1; }
-pkg-config --atleast-version=33 libobs || { echo 'OBS 33 or newer development files are required.' >&2; exit 1; }
 version=$(python3 -c 'import json; print(json.load(open("buildspec.json"))["version"])')
 arch=$(uname -m)
 build_dir="build_linux_${arch}_v${version}"

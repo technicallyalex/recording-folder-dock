@@ -7,8 +7,8 @@ package="dist/recording-folder-dock-${version}-flatpak-${arch}.flatpak"
 [[ ! -e "$package" ]] || { echo "Package already exists: $package" >&2; exit 1; }
 flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 flatpak install --user --noninteractive --include-sdk flathub com.obsproject.Studio
-obs_version=$(flatpak info --user --show-version com.obsproject.Studio)
-[[ $obs_version =~ ^([0-9]+)\. ]] && (( BASH_REMATCH[1] >= 33 )) || { echo 'OBS Flatpak 33 or newer is required.' >&2; exit 1; }
+obs_version=$(flatpak run --command=obs com.obsproject.Studio --version)
+[[ $obs_version =~ ([0-9]+)\. ]] && (( BASH_REMATCH[1] >= 33 )) || { echo 'OBS Flatpak 33 or newer is required.' >&2; exit 1; }
 mkdir -p dist
 flatpak info --user --show-metadata com.obsproject.Studio > dist/obs-flatpak-metadata.ini
 source_dir="$PWD/build_flatpak_source_v$version"

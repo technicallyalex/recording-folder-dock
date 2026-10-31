@@ -2,7 +2,7 @@
 
 Builds require CMake 3.28+, a C++17 compiler, OBS frontend development files, and Qt 6 Widgets. The Windows script downloads pinned OBS and Qt dependencies automatically.
 
-Release packages target the OBS 33 plugin loader. Windows keeps its older pinned SDK for ABI compatibility; the installation layout, not a new frontend API, sets the minimum supported OBS version. OBS 31.1–32 users should keep v1.4.0.
+Release packages target the OBS 33 plugin loader. Windows keeps its older pinned SDK, and native Linux uses the OBS PPA's available development files; no new frontend API is required. The installation layout sets the minimum supported OBS version. OBS 31.1–32 users should keep v1.4.0.
 
 ## Windows
 
