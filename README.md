@@ -39,3 +39,13 @@ With automatic mode off, stop recording and replay before changing folders. With
 The dock supports Simple, Advanced Standard, and Custom FFmpeg with **Output to File** enabled. Folder selection checks actual write access; the availability icon is a lightweight filesystem check.
 
 Licensed under [GPL-2.0-or-later](LICENSE).
+
+## AI disclosure
+
+ChatGPT was used in development. The maintainer recorded this in [the original disclosure](https://github.com/technicallyalex/recording-folder-dock/commit/7da2a78a85f11a3479d6d6ccaa18795d8f10d582). That record does not identify models, affected files, specific tasks, or the proportion of AI-generated material, so those details remain unverified.
+
+OpenAI Codex was used for the 2026-10-31 repository audit and to draft these disclosure and licensing documentation changes. This describes this audit only and does not establish earlier Codex use.
+
+## Licensing and third-party material
+
+The project is [GPL-2.0-or-later](LICENSE), as stated in its source headers. The [third-party and distribution notes](docs/THIRD_PARTY_NOTICES.md) explain the OBS template provenance, OBS/Qt dependencies, screenshots, source availability, and remaining provenance limits. AI assistance does not change these terms or establish ownership of third-party material.
