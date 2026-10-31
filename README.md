@@ -20,15 +20,19 @@ Download the package for your OBS installation, close OBS, and follow the matchi
 
 | Platform | Package | Install |
 | --- | --- | --- |
-| Windows x64 | `windows-x64.zip` | Extract and copy `recording-folder-dock` into `C:\ProgramData\obs-studio\plugins\`. |
+| Windows x64 | `windows-x64.zip` | Extract and run `install-windows.ps1` in an Administrator PowerShell. |
 | Native Linux x86-64 | `linux-x86_64.tar.gz` | Extract, then run `bash install-linux.sh` from the extracted folder. |
 | OBS Flatpak x86-64 | `flatpak-x86_64.flatpak` | Run `flatpak install --user ./recording-folder-dock-VERSION-flatpak-x86_64.flatpak`. |
 
 Restart OBS and enable **Docks → Recording Folder**.
 
-Windows requires 64-bit OBS 31.1 or newer. The native Linux package targets Ubuntu 24.04 with the OBS Project PPA; other distributions can [build from source](docs/DEVELOPMENT.md) or use OBS Flatpak. Flatpak folder access follows OBS's sandbox permissions.
+These packages require OBS 33 or newer. For OBS 31.1–32, use [v1.4.0](https://github.com/technicallyalex/recording-folder-dock/releases/tag/v1.4.0). The native Linux package targets Ubuntu 24.04 with the OBS Project PPA; other distributions can [build from source](docs/DEVELOPMENT.md) or use OBS Flatpak. Flatpak folder access follows OBS's sandbox permissions.
 
-For portable Windows OBS, copy the DLL into its `obs-plugins\64bit` folder. To uninstall, close OBS and remove the installed plugin folder; Flatpak users can run `flatpak uninstall --user com.obsproject.Studio.Plugin.RecordingFolderDock`.
+On Windows, the DLL now sits directly in `C:\ProgramData\obs-studio\plugins\recording-folder-dock\`, beside `data`. For a custom OBS location, run `.\install-windows.ps1 -ObsPath "D:\OBS"`; for portable OBS, add `-Portable` to install under `<OBS root>\plugins\`. The installer backs up previous plugin files under `obs-studio\plugin-backups` (portable: `<OBS root>\plugin-backups`) before removing this plugin's legacy copies. Presets and OBS settings are preserved.
+
+Native Linux installs to `${XDG_DATA_HOME:-~/.local/share}/obs-studio/plugins/recording-folder-dock/`, with the `.so` beside `data`. Its installer backs up the old per-user plugin folder and removes its old module; distribution-managed system copies should be removed through their package manager. Flatpak packages use OBS 33's extension paths; update using `flatpak install --user` as above.
+
+These paths follow [OBS's migration guide](https://obsproject.com/kb/legacy-plugin-developer-info) and the [OBS 33 Linux/Flatpak loaders](https://github.com/obsproject/obs-studio/tree/33.0.0/frontend/plugin-manager). To uninstall, close OBS and remove the installed plugin folder; Flatpak users can run `flatpak uninstall --user com.obsproject.Studio.Plugin.RecordingFolderDock`.
 
 ## Using the dock
 
